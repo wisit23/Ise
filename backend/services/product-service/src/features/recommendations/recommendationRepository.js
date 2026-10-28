@@ -80,6 +80,8 @@ function createRecommendationRepository(db, sql = Prisma) {
           )}) THEN ${signal.weight}::double precision ELSE 0 END`,
       ),
       like: behaviorScore(behavior.likes || [], similarityScore),
+      productView: behaviorScore(behavior.productViews || [], similarityScore),
+      videoView: behaviorScore(behavior.videoViews || [], similarityScore),
       purchase: behaviorScore(behavior.purchases || [], similarityScore),
     };
     const score = sql.join(
@@ -100,7 +102,8 @@ function createRecommendationRepository(db, sql = Prisma) {
     const selection = sql.sql`SELECT products.id, products.created_at, (${score}) AS score,
         (${matches.category}) AS category, (${matches.style}) AS style,
         (${matches.brand}) AS brand, (${matches.size}) AS size,
-        (${matches.search}) AS search, (${matches.like}) AS "like", (${matches.purchase}) AS purchase
+        (${matches.search}) AS search, (${matches.like}) AS "like", (${matches.purchase}) AS purchase,
+        (${matches.productView}) AS "productView", (${matches.videoView}) AS "videoView"
         FROM products WHERE ${where}`;
     // A seed lasts for one browsing session, including all its pages. Allocate
     // disjoint pools first, then interleave them; independent page shuffles
@@ -146,7 +149,8 @@ function createRecommendationRepository(db, sql = Prisma) {
       : sql.sql`SELECT products.id, (${score}) AS score,
         (${matches.category}) AS category, (${matches.style}) AS style,
         (${matches.brand}) AS brand, (${matches.size}) AS size,
-        (${matches.search}) AS search, (${matches.like}) AS "like", (${matches.purchase}) AS purchase
+        (${matches.search}) AS search, (${matches.like}) AS "like", (${matches.purchase}) AS purchase,
+        (${matches.productView}) AS "productView", (${matches.videoView}) AS "videoView"
         FROM products WHERE ${where}
         ORDER BY ${searchOrder} score DESC, products.created_at DESC, products.id ASC LIMIT ${take} OFFSET ${skip}`;
 

@@ -60,6 +60,7 @@ test("likes load from live choices scoped to the viewer and purchase signals ski
     categoryLinks: [{ category: { name: "Running" } }],
   };
   const repo = createBehaviorRepository({
+    recommendationView: { findMany: async () => [] },
     recommendationSearch: {
       findMany: async ({ where }) => {
         assert.equal(where.userId, "buyer");
@@ -130,6 +131,130 @@ test("behavior personalizes without a Style Profile and survives a partial provi
   assert.deepEqual(result.unavailableSources, ["profile", "purchases"]);
   assert.equal(args.behavior.searches[0].query, "shoes");
   assert.equal(args.filters.brand, "Nike");
+});
+
+test("view events validate seeds and deduplicate per account, product and source", async () => {
+  const writes = [];
+  const product = { id: "p" };
+  const viewStore = {
+    upsert: async (args) => writes.push(args),
+    findMany: async ({ where, take }) => {
+      assert.equal(where.userId, "buyer");
+      assert.equal(take, 50);
+      assert.ok(where.viewedAt.gte instanceof Date);
+      return [{ productId: "p" }];
+    },
+    deleteMany: async ({ where }) => {
+      assert.equal(where.userId, "buyer");
+      assert.deepEqual(where.productId.notIn, ["p"]);
+    },
+  };
+  const repo = createBehaviorRepository({
+    product: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.moderatedAt, null);
+        assert.equal(where.status, "available");
+        assert.deepEqual(where.sellerId, { not: "buyer" });
+        return where.id === "p" ? product : null;
+      },
+    },
+    productVideo: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.deletedAt, null);
+        assert.equal(where.product.status, "available");
+        return where.id === "v" ? { product } : null;
+      },
+    },
+    $transaction: async (fn) => fn({ recommendationView: viewStore }),
+  });
+  await repo.recordView("buyer", {
+    source: "product",
+    productId: "p",
+    userId: "victim",
+  });
+  await repo.recordView("buyer", { source: "product", productId: "p" });
+  await repo.recordView("buyer", { source: "video", videoId: "v" });
+  assert.deepEqual(writes[0].where, writes[1].where);
+  assert.deepEqual(writes[2].create, {
+    userId: "buyer",
+    productId: "p",
+    source: "video",
+  });
+  assert.ok(writes[1].update.viewedAt instanceof Date);
+  for (const input of [
+    null,
+    {},
+    { source: "other", productId: "p" },
+    { source: "product", productId: "" },
+    { source: "video", videoId: 42 },
+    { source: "product", productId: "gone" },
+    { source: "video", videoId: "gone" },
+  ]) {
+    await assert.rejects(repo.recordView("buyer", input));
+  }
+  assert.equal(writes.length, 3);
+});
+
+test("view signals use independent caps, account filters and recency with search's new default", async () => {
+  const product = { category: "Shoes", brand: "Nike", tags: ["sport"] };
+  const repo = createBehaviorRepository({
+    recommendationSearch: {
+      findMany: async () => [{ query: "nike", searchedAt: new Date() }],
+    },
+    swipeChoice: { findMany: async () => [] },
+    recommendationView: {
+      findMany: async ({ where, take }) => {
+        assert.equal(where.userId, "buyer");
+        assert.equal(where.product.deletedAt, null);
+        assert.equal(where.product.moderatedAt, null);
+        assert.equal(take, 100);
+        return [
+          { source: "product", product, viewedAt: new Date() },
+          {
+            source: "video",
+            product,
+            viewedAt: new Date(Date.now() - 20 * 86400000),
+          },
+        ];
+      },
+    },
+  });
+  const behavior = await repo.get("buyer");
+  assert.equal(behavior.searches[0].weight, 3);
+  assert.equal(behavior.productViews[0].weight, 5);
+  assert.equal(behavior.videoViews[0].weight, 2.5);
+  assert.deepEqual(behavior.productViews[0].profile.brands, ["nike"]);
+});
+
+test("view event API restricts writes to the authenticated customer", async () => {
+  const calls = [];
+  const app = express();
+  app.use(express.json());
+  app.locals.validateAccessSession = async () => ({});
+  app.use(
+    createRecommendationRoutes(
+      {},
+      {
+        recordView: async (userId, input) => calls.push({ userId, input }),
+      },
+    ),
+  );
+  app.use(errorHandler);
+  const body = { source: "video", videoId: "v", userId: "victim" };
+  assert.equal(
+    (await request(app).post("/view-events").send(body)).status,
+    401,
+  );
+  for (const role of ["ADMIN", "BUYER"]) {
+    const response = await request(app)
+      .post("/view-events")
+      .set("Authorization", `Bearer ${signAccessToken({ sub: "buyer", role })}`)
+      .send(body);
+    assert.equal(response.status, role === "ADMIN" ? 403 : 204);
+    if (role === "BUYER")
+      assert.equal(response.headers["cache-control"], "private, no-store");
+  }
+  assert.deepEqual(calls, [{ userId: "buyer", input: body }]);
 });
 
 test("search event API prevents guest/staff writes and ignores spoofed owner", async () => {

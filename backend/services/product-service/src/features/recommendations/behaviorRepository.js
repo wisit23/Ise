@@ -1,6 +1,6 @@
 const prisma = require("../../models/prismaClient");
-const { badRequest } = require("@reloop/shared");
-const { normalizeProfile } = require("./recommendationRules");
+const { badRequest, notFound } = require("@reloop/shared");
+const { normalizeProfile, weightFor } = require("./recommendationRules");
 const DAY = 86400000;
 
 function recencyWeight(date, weight, now = Date.now()) {
@@ -21,6 +21,61 @@ function productInterest(product) {
 }
 
 function createBehaviorRepository(db = prisma) {
+  async function recordView(userId, input = {}) {
+    const { source, productId, videoId } = input || {};
+    const id = source === "product" ? productId : videoId;
+    if (
+      !["product", "video"].includes(source) ||
+      typeof id !== "string" ||
+      !id.trim() ||
+      id.length > 200
+    ) {
+      throw badRequest("Invalid recommendation view event");
+    }
+    const eligible = {
+      deletedAt: null,
+      moderatedAt: null,
+      status: "available",
+      sellerId: { not: userId },
+    };
+    const product =
+      source === "product"
+        ? await db.product.findFirst({ where: { id, ...eligible } })
+        : (
+            await db.productVideo.findFirst({
+              where: { id, deletedAt: null, product: eligible },
+              include: { product: true },
+            })
+          )?.product;
+    if (!product) throw notFound("product not found");
+    await db.$transaction(async (tx) => {
+      await tx.recommendationView.upsert({
+        where: {
+          userId_productId_source: { userId, productId: product.id, source },
+        },
+        create: { userId, productId: product.id, source },
+        update: { viewedAt: new Date() },
+      });
+      const keep = await tx.recommendationView.findMany({
+        where: {
+          userId,
+          source,
+          viewedAt: { gte: new Date(Date.now() - 90 * DAY) },
+        },
+        orderBy: [{ viewedAt: "desc" }, { productId: "asc" }],
+        take: 50,
+        select: { productId: true },
+      });
+      await tx.recommendationView.deleteMany({
+        where: {
+          userId,
+          source,
+          productId: { notIn: keep.map((row) => row.productId) },
+        },
+      });
+    });
+  }
+
   async function recordSearch(userId, input) {
     if (
       typeof input !== "string" ||
@@ -51,7 +106,7 @@ function createBehaviorRepository(db = prisma) {
 
   async function get(userId) {
     const since = new Date(Date.now() - 90 * DAY);
-    const [searches, likes] = await Promise.all([
+    const [searches, likes, views] = await Promise.all([
       db.recommendationSearch.findMany({
         where: { userId, searchedAt: { gte: since } },
         orderBy: { searchedAt: "desc" },
@@ -88,16 +143,57 @@ function createBehaviorRepository(db = prisma) {
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
+      db.recommendationView.findMany({
+        where: {
+          userId,
+          viewedAt: { gte: since },
+          product: {
+            deletedAt: null,
+            moderatedAt: null,
+            status: { not: "removed" },
+          },
+        },
+        include: {
+          product: {
+            include: {
+              categoryLinks: {
+                where: { deletedAt: null },
+                include: { category: true },
+              },
+            },
+          },
+        },
+        orderBy: [
+          { viewedAt: "desc" },
+          { productId: "asc" },
+          { source: "asc" },
+        ],
+        take: 100,
+      }),
     ]);
     return {
       searches: searches.map((row) => ({
         query: row.query,
-        weight: recencyWeight(row.searchedAt, 6),
+        weight: recencyWeight(row.searchedAt, weightFor("search")),
       })),
       likes: likes.map((row) => ({
         profile: productInterest(row.productVideo.product),
-        weight: recencyWeight(row.createdAt, 8),
+        weight: recencyWeight(row.createdAt, weightFor("like")),
       })),
+      productViews: views
+        .filter((row) => row.source === "product")
+        .slice(0, 50)
+        .map((row) => ({
+          profile: productInterest(row.product),
+          weight: recencyWeight(row.viewedAt, weightFor("productView")),
+        })),
+      videoViews: views
+        .filter((row) => row.source === "video")
+        .slice(0, 50)
+        .map((row) => ({
+          profile: productInterest(row.product),
+          weight: recencyWeight(row.viewedAt, weightFor("videoView")),
+        })),
     };
   }
 
@@ -123,11 +219,11 @@ function createBehaviorRepository(db = prisma) {
       .filter((row) => byId.has(row.productId))
       .map((row) => ({
         profile: productInterest(byId.get(row.productId)),
-        weight: recencyWeight(row.purchasedAt, 10),
+        weight: recencyWeight(row.purchasedAt, weightFor("purchase")),
       }))
       .filter((row) => row.weight > 0);
   }
-  return { recordSearch, get, purchases };
+  return { recordSearch, recordView, get, purchases };
 }
 module.exports = createBehaviorRepository();
 module.exports.createBehaviorRepository = createBehaviorRepository;

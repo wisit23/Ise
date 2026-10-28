@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import SwipeVideoCard from "./SwipeVideoCard";
 import { apiFetch } from "../../lib/api";
+import { getAccessToken, getCurrentRoles } from "../../lib/auth";
 
 jest.mock("../../lib/api", () => ({
   apiFetch: jest.fn(),
@@ -11,6 +12,7 @@ jest.mock("../../lib/auth", () => ({
   ...jest.requireActual("../../lib/auth"),
   getStoredUser: jest.fn(()=>({id:"buyer-test",role:"BUYER"})),
   getAccessToken: jest.fn(() => "test-token"),
+  getCurrentRoles: jest.fn(() => ["BUYER"]),
 }));
 
 const mockVideo = {
@@ -81,6 +83,31 @@ describe("SwipeVideoCard", () => {
       "aria-label",
       expect.stringContaining("เล่น"),
     );
+  });
+
+  it("records a view only when the active clip plays, without counting playback loops twice", async () => {
+    const { container, rerender } = render(<SwipeVideoCard video={mockVideo} isActive={false} />);
+    const element = container.querySelector("video");
+    fireEvent.playing(element);
+    expect(apiFetch).not.toHaveBeenCalledWith("/api/products/recommendations/view-events", expect.anything());
+    rerender(<SwipeVideoCard video={mockVideo} isActive={true} />);
+    await act(async () => {
+      fireEvent.playing(element);
+      fireEvent.playing(element);
+    });
+    const events = apiFetch.mock.calls.filter(([path]) => path === "/api/products/recommendations/view-events");
+    expect(events).toEqual([["/api/products/recommendations/view-events", {
+      method: "POST", token: "test-token", body: { source: "video", videoId: "vid-1" },
+    }]]);
+  });
+
+  it("does not record guest or staff clip views", () => {
+    const { container } = render(<SwipeVideoCard video={mockVideo} isActive={true} />);
+    getAccessToken.mockReturnValueOnce(null);
+    fireEvent.playing(container.querySelector("video"));
+    getCurrentRoles.mockReturnValueOnce(["ADMIN"]);
+    fireEvent.playing(container.querySelector("video"));
+    expect(apiFetch).not.toHaveBeenCalledWith("/api/products/recommendations/view-events", expect.anything());
   });
 
   it("toggles mute without resetting currentTime or forcing play when paused", async () => {

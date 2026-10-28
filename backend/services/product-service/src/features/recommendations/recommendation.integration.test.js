@@ -7,8 +7,106 @@ const prisma = require("../../models/prismaClient");
 const {
   createRecommendationRepository,
 } = require("./recommendationRepository");
-const { normalizeProfile } = require("./recommendationRules");
+const { normalizeProfile, weightFor } = require("./recommendationRules");
 const { createBehaviorRepository } = require("./behaviorRepository");
+
+test("configured weights change PostgreSQL ranking and response explanations together", async (t) => {
+  if (!process.env.DATABASE_URL_PRODUCT && !process.env.DATABASE_URL) {
+    if (process.env.REQUIRE_INTEGRATION === "1")
+      throw new Error("Test database URL required");
+    t.skip("Set DATABASE_URL_PRODUCT to run PostgreSQL verification");
+    return;
+  }
+  const rollback = new Error("rollback configured weight fixtures");
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const key = randomUUID();
+        const condition = `weights-${key}`;
+        await tx.condition.create({
+          data: { value: condition, label: "Test" },
+        });
+        const make = (fields) =>
+          tx.product.create({
+            data: {
+              sellerId: `seller-${key}`,
+              title: "Weight fixture",
+              price: 100,
+              category: `other-${key}`,
+              tags: [],
+              condition,
+              ...fields,
+            },
+          });
+        const searchProduct = await make({ title: `search${key}` });
+        const viewProduct = await make({
+          category: `view-${key}`,
+          brand: `brand-${key}`,
+          tags: [`style-${key}`],
+        });
+        const buyer = `weights-buyer-${key}`;
+        // Already inside the rollback transaction; Prisma does not nest transactions.
+        const behaviors = createBehaviorRepository({
+          ...tx,
+          $transaction: async (fn) => fn(tx),
+        });
+        await behaviors.recordSearch(buyer, `search${key}`);
+        await behaviors.recordView(buyer, {
+          source: "product",
+          productId: viewProduct.id,
+        });
+        const clip = await tx.productVideo.create({
+          data: {
+            productId: viewProduct.id,
+            sellerId: viewProduct.sellerId,
+            videoUrl: "/test.mp4",
+          },
+        });
+        await behaviors.recordView(buyer, {
+          source: "video",
+          videoId: clip.id,
+        });
+        const repo = createRecommendationRepository(tx);
+        const result = await repo.list({
+          userId: buyer,
+          profile: normalizeProfile(),
+          behavior: await behaviors.get(buyer),
+          skip: 0,
+          take: 50,
+        });
+        const relevant = result.items.filter((item) =>
+          [searchProduct.id, viewProduct.id].includes(item.id),
+        );
+        const expected = [
+          { id: searchProduct.id, score: weightFor("search") },
+          {
+            id: viewProduct.id,
+            score: weightFor("productView") + weightFor("videoView"),
+          },
+        ].sort((a, b) => b.score - a.score);
+        assert.deepEqual(
+          relevant.map((item) => ({
+            id: item.id,
+            score: item.recommendation.score,
+          })),
+          expected,
+        );
+        const views = relevant.find((item) => item.id === viewProduct.id);
+        assert.equal(
+          views.recommendation.reasons.length,
+          Number(weightFor("productView") > 0) +
+            Number(weightFor("videoView") > 0),
+        );
+        throw rollback;
+      },
+      { timeout: 30000 },
+    );
+  } catch (error) {
+    if (error !== rollback) throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
+});
 
 test("PostgreSQL ranking: category memberships, category-specific sizes, eligibility and deterministic paging", async (t) => {
   if (!process.env.DATABASE_URL_PRODUCT && !process.env.DATABASE_URL) {
@@ -144,7 +242,10 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
         assert.equal(empty.matchedTotal, 0);
         assert.equal(empty.items[0].recommendation.score, 0);
         assert.ok(wrongCategory.id);
-        const activities = createBehaviorRepository(tx);
+        const activities = createBehaviorRepository({
+          ...tx,
+          $transaction: async (fn) => fn(tx),
+        });
         await tx.recommendationSearch.create({
           data: { userId: buyer, query: brand.toLowerCase() },
         });
@@ -167,8 +268,38 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
           profile: normalizeProfile(),
           behavior,
         });
-        assert.equal(inferred.items[0].recommendation.score, 24);
+        assert.equal(inferred.items[0].recommendation.score, 21);
         assert.equal(inferred.items[0].recommendation.reasons.length, 3);
+        await activities.recordView(buyer, {
+          source: "product",
+          productId: older.id,
+        });
+        await activities.recordView(buyer, {
+          source: "product",
+          productId: older.id,
+        });
+        await activities.recordView(buyer, {
+          source: "video",
+          videoId: clip.id,
+        });
+        assert.equal(
+          await tx.recommendationView.count({ where: { userId: buyer } }),
+          2,
+        );
+        const viewedBehavior = await activities.get(buyer);
+        const viewed = await repo.list({
+          ...args,
+          profile: normalizeProfile(),
+          behavior: viewedBehavior,
+        });
+        assert.equal(viewed.items[0].recommendation.score, 21); // search 3 + views 10 + heart 8
+        assert.equal(viewed.items[0].recommendation.reasons.length, 4);
+        await assert.rejects(
+          activities.recordView(buyer, {
+            source: "product",
+            productId: excluded[0],
+          }),
+        );
         // Explicit filters remain hard constraints even for high-scoring items.
         const filtered = await repo.list({
           ...args,
@@ -193,17 +324,19 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
         const ownSignals = await activities.get("another-buyer");
         assert.equal(ownSignals.searches.length, 0);
         assert.equal(ownSignals.likes.length, 0);
+        assert.equal(ownSignals.productViews.length, 0);
+        assert.equal(ownSignals.videoViews.length, 0);
         const literalSearch = await repo.list({
           ...args,
           profile: normalizeProfile(),
           behavior: {
-            searches: [{ query: "nike", weight: 6 }],
+            searches: [{ query: "nike", weight: 3 }],
           },
         });
         assert.equal(
           literalSearch.items.find((item) => item.id === exactSearch.id)
             .recommendation.score,
-          6,
+          3,
         );
         assert.equal(
           literalSearch.items.find((item) => item.id === misleadingWord.id)

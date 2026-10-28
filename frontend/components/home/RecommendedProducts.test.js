@@ -21,7 +21,7 @@ jest.mock(
 
 beforeEach(() => apiFetch.mockReset());
 
-it("shows personalized products, match reasons and profile link", async () => {
+it("shows personalized products and profile link without captions below cards", async () => {
   apiFetch.mockResolvedValue({
     personalized: true,
     items: [
@@ -32,11 +32,18 @@ it("shows personalized products, match reasons and profile link", async () => {
           reasons: ["สไตล์ที่คุณชอบ", "ไซซ์ที่คุณเลือกในหมวดนี้"],
         },
       },
+      {
+        id: "p2",
+        title: "Discovery shirt",
+        recommendation: { bucket: "discovery", reasons: [] },
+      },
     ],
   });
   render(<RecommendedProducts />);
   expect(await screen.findByText("Vintage shirt")).toBeInTheDocument();
-  expect(screen.getByText(/สไตล์ที่คุณชอบ · ไซซ์/)).toBeInTheDocument();
+  expect(screen.getByText("Discovery shirt")).toBeInTheDocument();
+  expect(screen.queryByText(/สไตล์ที่คุณชอบ · ไซซ์/)).not.toBeInTheDocument();
+  expect(screen.queryByText("ลองค้นพบสินค้าที่ต่างออกไป")).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "ปรับความสนใจ" })).toHaveAttribute(
     "href",
     "/profile",
@@ -57,7 +64,7 @@ it.each([
   });
   render(<RecommendedProducts />);
   expect(await screen.findByText("New shirt")).toBeInTheDocument();
-  expect(screen.getByText("สินค้าใหม่ที่คุณอาจสนใจ")).toBeInTheDocument();
+  expect(screen.queryByText("สินค้าใหม่ที่คุณอาจสนใจ")).not.toBeInTheDocument();
   if (fallbackReason === "guest")
     expect(
       screen.getByRole("link", { name: /เข้าสู่ระบบเพื่อ/ }),

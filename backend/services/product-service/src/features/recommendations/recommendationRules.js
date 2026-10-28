@@ -6,9 +6,21 @@ const RULES = [
   { key: "size", weight: 5, label: "ไซซ์ที่คุณเลือกในหมวดนี้" },
   {
     key: "search",
-    weight: 6,
+    weight: 3,
     behavioral: true,
     label: "คล้ายสิ่งที่คุณค้นหาล่าสุด",
+  },
+  {
+    key: "productView",
+    weight: 5,
+    behavioral: true,
+    label: "คล้ายสินค้าที่คุณดู",
+  },
+  {
+    key: "videoView",
+    weight: 5,
+    behavioral: true,
+    label: "คล้ายสินค้าจากคลิปที่คุณดู",
   },
   {
     key: "like",
@@ -23,6 +35,25 @@ const RULES = [
     label: "คล้ายสินค้าที่คุณซื้อ",
   },
 ];
+
+// Read once at service startup; all scoring consumers use the same weights.
+for (const rule of RULES) {
+  const suffix = rule.key
+    .replace(/[A-Z]/g, (letter) => `_${letter}`)
+    .toUpperCase();
+  const name = `RECOMMENDATION_WEIGHT_${suffix}`;
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") continue;
+  const weight = Number(raw);
+  if (!Number.isFinite(weight) || weight < 0) {
+    throw new Error(`${name} must be a finite non-negative number`);
+  }
+  rule.weight = weight;
+}
+
+function weightFor(key) {
+  return RULES.find((rule) => rule.key === key).weight;
+}
 
 function normalize(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -56,7 +87,7 @@ function hasPreferences(profile) {
 }
 
 function explanation(matches) {
-  const matched = RULES.filter((rule) => matches[rule.key]);
+  const matched = RULES.filter((rule) => rule.weight > 0 && matches[rule.key]);
   return {
     score: matched.reduce(
       (sum, rule) =>
@@ -67,4 +98,10 @@ function explanation(matches) {
   };
 }
 
-module.exports = { RULES, normalizeProfile, hasPreferences, explanation };
+module.exports = {
+  RULES,
+  weightFor,
+  normalizeProfile,
+  hasPreferences,
+  explanation,
+};

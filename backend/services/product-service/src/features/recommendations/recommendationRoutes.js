@@ -23,6 +23,20 @@ function createRecommendationRoutes(
 ) {
   const router = Router();
   router.post(
+    "/view-events",
+    requireAuth,
+    requireCustomerAccount,
+    async (req, res, next) => {
+      try {
+        await behaviors.recordView(req.userId, req.body);
+        res.set("Cache-Control", "private, no-store");
+        res.status(204).end();
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+  router.post(
     "/search-events",
     requireAuth,
     requireCustomerAccount,

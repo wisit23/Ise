@@ -34,6 +34,18 @@ model RecommendationSearch {
   @@map("recommendation_searches")
 }
 
+model RecommendationView {
+  userId String @map("user_id")
+  productId String @map("product_id")
+  source String
+  viewedAt DateTime @default(now()) @map("viewed_at")
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId, source])
+  @@index([userId, source, viewedAt])
+  @@map("recommendation_views")
+}
+
 model Product {
   deletedAt DateTime? @map("deleted_at")
   referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
@@ -79,6 +91,7 @@ model Product {
   categoryLinks      ProductCategory[]
   countViews         CountView[]
   favorites          ProductFavorite[]
+  recommendationViews RecommendationView[]
   conditionDefinition Condition @relation(fields: [condition], references: [value])
 
   @@index([sellerId])

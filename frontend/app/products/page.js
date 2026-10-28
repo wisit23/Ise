@@ -442,11 +442,6 @@ function ProductsPageInner() {
                 {items.map((p, i) => (
                   <Reveal key={p.id} delay={Math.min(i, 7) * 45}>
                     <ProductCard product={p} />
-                    {p.recommendation?.reasons?.length > 0 && (
-                      <p className="mt-2 text-xs leading-relaxed text-ink-subtle">
-                        {p.recommendation.reasons.join(" · ")}
-                      </p>
-                    )}
                   </Reveal>
                 ))}
               </div>

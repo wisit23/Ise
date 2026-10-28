@@ -117,6 +117,7 @@ export default function ProductDetailPage() {
   });
 
   const campaignRequestIdRef = useRef(0);
+  const recordedViewRef = useRef(null);
   const lastIdentityRef = useRef({
     initialized: false,
     userId: null,
@@ -240,6 +241,28 @@ export default function ProductDetailPage() {
       )
       .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
+
+  useEffect(() => {
+    if (
+      !viewer.ready ||
+      !viewer.isAuthenticated ||
+      !viewer.userId ||
+      !isCustomerAccountRoles(viewer.roles) ||
+      product?.id !== id ||
+      product.status !== "available" ||
+      product.sellerId === viewer.userId
+    ) return;
+    const key = `${viewer.userId}:${id}`;
+    if (recordedViewRef.current === key) return;
+    recordedViewRef.current = key;
+    apiFetch("/api/products/recommendations/view-events", {
+      method: "POST",
+      token: getAccessToken(),
+      body: { source: "product", productId: id },
+    }).catch(() => {
+      if (recordedViewRef.current === key) recordedViewRef.current = null;
+    });
+  }, [id, product, viewer]);
 
   // ── Real-time WebSocket Listeners ──────────────────────────────────────────
   useChatSocketEvent("product:updated", (payload) => {

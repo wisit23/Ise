@@ -181,6 +181,26 @@ test("available listing still offers contact seller", async () => {
   });
 });
 
+test("records a recommendation view for the loaded product and signed-in customer", async () => {
+  mockApiResponses();
+  render(<ProductDetailPage />);
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+    "/api/products/recommendations/view-events", {
+      method: "POST", token: "buyer-token", body: { source: "product", productId: "p" },
+    },
+  ));
+  expect(apiFetch.mock.calls.filter(([path]) => path === "/api/products/recommendations/view-events")).toHaveLength(1);
+});
+
+test.each(["guest", "staff", "owner", "sold"])("does not record a recommendation product view for %s", async (scenario) => {
+  if (scenario === "guest") currentAuth.token = null;
+  if (scenario === "staff") { currentAuth.roles = ["ADMIN"]; currentAuth.isCustomerAccountRoles = false; }
+  mockApiResponses({ sellerId: scenario === "owner" ? "buyer" : "seller", status: scenario === "sold" ? "sold" : "available" });
+  render(<ProductDetailPage />);
+  await screen.findByRole("heading", { name: "Listing p" });
+  expect(apiFetch).not.toHaveBeenCalledWith("/api/products/recommendations/view-events", expect.anything());
+});
+
 test("shows why an owned voucher is unavailable and does not offer to claim it again", async () => {
   const campaign = {
     id: "campaign-tete",

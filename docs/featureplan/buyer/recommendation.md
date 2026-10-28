@@ -24,20 +24,46 @@ Each dimension contributes once, matching trimmed values without case sensitivit
 - Size: 5 points, requiring both a matching category and size from the same profile group.
 
 Legacy `unassignedSizes` do not influence ranking because they have no category.
-Behavior adds three capped source scores:
+Behavior adds five capped source scores (defaults):
 
-- Submitted searches: up to 6 points. All space-separated query terms must occur
+- Submitted searches: up to 3 points. All space-separated query terms must occur
   literally in the candidate's searchable text. This avoids inferring Nike interest
   from a fuzzy match to the condition label "Like New".
+- Product views: up to 5 points, from authenticated customers opening an available product detail page.
+- Video views: up to 5 points, when an active swipe clip actually starts playing.
+  Loading or preloading an inactive clip does not record a view.
 - Current swipe hearts: up to 8 points, using live `SwipeChoice` rows from the last 90 days.
   Removing a heart removes that evidence on the next catalog/recommendation request.
 - Paid purchases: up to 10 points, using the last 50 eligible orders.
 
-For hearts and purchases, similarity allocates 50% to category, 30% to brand,
+For views, hearts and purchases, similarity allocates 50% to category, 30% to brand,
 and 20% to style. Each source uses its best matching seed; repeated searches or hearts
 cannot add unlimited points. Evidence from the last 7 days gets full weight,
 8–30 days half, and older evidence one quarter. Search history retains at most
 50 distinct terms per account for 90 days and uses the latest 30 in ranking.
+View history uses one row per account, product and source. Viewing again refreshes
+the timestamp, without stacking points. Each view source retains the latest 50
+products within 90 days; historical views without timestamps are not backfilled.
+
+All nine criterion weights can be configured in the product-service environment:
+
+```env
+RECOMMENDATION_WEIGHT_CATEGORY=4
+RECOMMENDATION_WEIGHT_STYLE=3
+RECOMMENDATION_WEIGHT_BRAND=2
+RECOMMENDATION_WEIGHT_SIZE=5
+RECOMMENDATION_WEIGHT_SEARCH=3
+RECOMMENDATION_WEIGHT_PRODUCT_VIEW=5
+RECOMMENDATION_WEIGHT_VIDEO_VIEW=5
+RECOMMENDATION_WEIGHT_LIKE=8
+RECOMMENDATION_WEIGHT_PURCHASE=10
+```
+
+Missing or blank values use these defaults. Finite non-negative numbers, including
+decimals, are accepted. `0` disables a criterion and its explanation. Invalid values
+stop startup with the setting name. Restart product-service after changing env;
+SQL ranking, behavioral recency weights and response explanations share the same settings.
+The existing 50/30/20 similarity proportions and recency windows remain fixed.
 
 Scores sort descending, then creation time descending, then product ID ascending.
 SQL ranks the complete eligible catalog before pagination. Only `available`,
@@ -77,6 +103,10 @@ relevance ahead of personalization; unrelated high-scoring products cannot bypas
 `POST /api/products/recommendations/search-events` accepts `{query}` for authenticated
 customer accounts only. The catalog records submitted queries/URL searches before fetching
 results; typing and pagination do not create events. Guests receive no stored behavior.
+`POST /api/products/recommendations/view-events` accepts either
+`{source: "product", productId}` or `{source: "video", videoId}` for authenticated
+customers. The server resolves the product and rejects unavailable, deleted,
+moderated or self-owned seeds. The account ID always comes from the verified token.
 
 `unavailableSources` lists profile, activity or purchase provider failures. Available
 sources still personalize when another provider is unavailable.
@@ -85,8 +115,7 @@ Invalid/revoked sessions remain authentication errors before profile retrieval.
 
 The homepage and catalog refresh recommendations on authentication changes and ignore stale
 responses from prior accounts. Returning home after saving Style Profile reads the new values.
-This is rule-based matching of saved preferences and behavior; it does not train an ML model
-or infer from passive product views.
+This is rule-based matching of saved preferences and behavior; it does not train an ML model.
 
 Deployment requires Auth migration `20261015000000_multi_value_style_profile` from
 the preceding Style Profile work. It was pending in the running local database and
@@ -94,6 +123,9 @@ was applied using `prisma migrate deploy` during this implementation.
 Product migration `20261015010000_recommendation_searches` adds persistent account search
 history; it was applied to the local database. Both updated Product and Order services
 must be running for all signals to contribute.
+The new Product migration `20261028000000_recommendation_views` must be applied
+before starting the updated service. It creates the timestamped view history;
+it does not alter existing public product view counts.
 
 ## Verification
 
@@ -106,5 +138,8 @@ must be running for all signals to contribute.
   account changes and cancellation.
 - `behavior.test.js`, `recommendationHistory.test.js`: recency, account isolation,
   paid order eligibility, source outages, event validation and provider contracts.
+- `recommendationWeights.test.js`: env overrides, defaults, zero, decimals and invalid settings.
+- `SwipeVideoCard.test.js`, product detail `page.test.js`: view events from actual consumers,
+  guest/staff exclusions and no duplicate events from video loops.
 - `products.test.js`: personalized catalog, retained filters/page parameters,
   submitted-search recording, no recording on paging and stale account responses.

@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { getAccessToken, getStoredUser, isCustomerAccountRoles } from "../../lib/auth";
+import {
+  getAccessToken,
+  getStoredUser,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
 import { apiFetch, mediaUrl } from "../../lib/api";
 import Button from "../ui/Button";
 
@@ -19,6 +24,27 @@ export default function SwipeVideoCard({ video, isActive }) {
   const commentTriggerRef = useRef(null);
   const dialogRef = useRef(null);
   const prevCommentOpenRef = useRef(false);
+  const recordedViewRef = useRef(null);
+
+  function recordRecommendationView() {
+    const token = getAccessToken();
+    if (
+      !isActive ||
+      document.visibilityState === "hidden" ||
+      !token ||
+      !isCustomerAccountRoles(getCurrentRoles())
+    ) return;
+    const key = `${token}:${video.id}`;
+    if (recordedViewRef.current === key) return;
+    recordedViewRef.current = key;
+    apiFetch("/api/products/recommendations/view-events", {
+      method: "POST",
+      token,
+      body: { source: "video", videoId: video.id },
+    }).catch(() => {
+      if (recordedViewRef.current === key) recordedViewRef.current = null;
+    });
+  }
 
   const [canChoose,setCanChoose]=useState(true);
   useEffect(()=>{const user=getStoredUser();if(user)setCanChoose(isCustomerAccountRoles([...new Set([user.role,...(user.roles || [])].filter(Boolean))]) && !["SUSPENDED","RESTRICTED_BUYER","RESTRICTED_ALL_COMMERCE"].includes(user.status));},[]);
@@ -517,6 +543,7 @@ export default function SwipeVideoCard({ video, isActive }) {
             playsInline
             muted={isMuted}
             onClick={handleVideoClick}
+            onPlaying={recordRecommendationView}
             onKeyDown={handleVideoKeyDown}
             tabIndex={0}
             role="button"

@@ -116,13 +116,6 @@ export default function RecommendedProducts() {
           {data.items.map((product) => (
             <div key={product.id} className="min-w-0">
               <ProductCard product={product} />
-              <p className="mt-2 text-xs leading-relaxed text-ink-subtle">
-                {product.recommendation?.reasons?.length
-                  ? product.recommendation.reasons.join(" · ")
-                  : product.recommendation?.bucket === "discovery"
-                    ? "ลองค้นพบสินค้าที่ต่างออกไป"
-                    : "สินค้าใหม่ที่คุณอาจสนใจ"}
-              </p>
             </div>
           ))}
         </div>

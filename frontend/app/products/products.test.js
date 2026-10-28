@@ -66,7 +66,11 @@ jest.mock("../../lib/api", () => ({
         sizes: ["M"],
       });
     return Promise.resolve({
-      items: [{ id: "mock-product" }],
+      items: [{
+        id: "mock-product",
+        title: "Catalog product",
+        recommendation: { reasons: ["คล้ายสิ่งที่คุณค้นหาล่าสุด"] },
+      }],
       totalPages: path.includes("minPrice") ? 2 : 1,
     });
   }),
@@ -87,6 +91,8 @@ test("renders accessible controls for the catalog filters", async () => {
     ).toBeInTheDocument(),
   );
   expect(screen.getByLabelText("สไตล์")).toBeInTheDocument();
+  expect(await screen.findByText("Catalog product")).toBeInTheDocument();
+  expect(screen.queryByText("คล้ายสิ่งที่คุณค้นหาล่าสุด")).not.toBeInTheDocument();
   expect(screen.getByLabelText("แบรนด์")).toBeInTheDocument();
   expect(screen.getByLabelText("ขนาด")).toBeInTheDocument();
   expect(screen.getByLabelText("สภาพสินค้า")).toBeInTheDocument();
