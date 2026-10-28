@@ -193,7 +193,7 @@ export default function CartPage() {
   const totalDiscount = totalOriginal - total;
 
   return (
-    <main className={`flex min-h-screen flex-col bg-gray-50 ${items.length > 0 ? "pb-[calc(8rem+env(safe-area-inset-bottom))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))]" : ""}`}>
+    <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
       <section className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ตะกร้าของฉัน</h1>
@@ -329,8 +329,8 @@ export default function CartPage() {
       </section>
 
       {items.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur z-20">
-          <div className="mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 max-w-4xl px-4 py-3 sm:py-4">
+        <div className="sticky bottom-0 mt-auto border-t border-gray-200 bg-white/95 backdrop-blur z-20">
+          <div className="mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 max-w-6xl px-4 py-3 sm:py-4">
             <div className="text-sm text-gray-600">
               เลือกแล้ว {selectedItems.length} รายการ ·{" "}
               {totalDiscount > 0 ? (
@@ -364,7 +364,7 @@ export default function CartPage() {
         </div>
       )}
 
-      <Footer />
+      <Footer className="mt-0" />
     </main>
   );
 }
