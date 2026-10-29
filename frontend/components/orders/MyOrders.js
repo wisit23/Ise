@@ -66,13 +66,11 @@ const TABS = [
     status: "pending_payment",
   },
   { key: "paid", label: "รอผู้ขายยืนยัน", status: "paid" },
+  { key: "preparing", label: "กำลังเตรียมสินค้า", status: "confirmed,ready_to_ship" },
   { key: "pickup_in_progress", label: "ขนส่งกำลังเข้ารับสินค้า", status: "pickup_in_progress" },
   { key: "in_transit", label: "กำลังจัดส่ง", status: "in_transit" },
-  { key: "delivered", label: "รอยืนยันรับ", status: "delivered" },
-  { key: "completed", label: "สำเร็จ", status: "completed" },
-  { key: "cancelled", label: "ยกเลิก", status: "cancelled" },
-  { key: "payment_expired", label: "หมดเวลาชำระเงิน", status: "payment_expired" },
-  { key: "seller_confirmation_expired", label: "หมดเวลาผู้ขายยืนยัน", status: "seller_confirmation_expired" },
+  { key: "completed", label: "สำเร็จ", status: "delivered,completed" },
+  { key: "cancelled", label: "ยกเลิก", status: "cancelled,payment_expired,seller_confirmation_expired" },
 ];
 
 const PAGE_SIZE = 8;
@@ -295,7 +293,7 @@ export default function MyOrders({
         return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
       }
       const tabDef = TABS.find((t) => t.key === tab);
-      if (!tabDef?.status || tabDef.status === updated.status) {
+      if (!tabDef?.status || tabDef.status.split(",").includes(updated.status)) {
         return [updated, ...prev];
       }
       return prev;
@@ -329,7 +327,7 @@ export default function MyOrders({
       <div
         role="group"
         aria-label="กรองคำสั่งซื้อ"
-        className="mb-6 flex flex-wrap gap-1 border-b border-gray-200"
+        className="mb-6 flex gap-1 overflow-x-auto border-b border-gray-200"
       >
         {TABS.map((t) => (
           <button
@@ -337,7 +335,7 @@ export default function MyOrders({
             type="button"
             aria-pressed={tab === t.key}
             onClick={() => handleTab(t.key)}
-            className={`border-b-2 px-4 py-2 text-sm font-medium ${
+            className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${
               tab === t.key
                 ? "border-emerald-600 text-emerald-700"
                 : "border-transparent text-gray-500 hover:text-gray-700"

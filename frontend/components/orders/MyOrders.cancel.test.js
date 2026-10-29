@@ -56,14 +56,14 @@ test.each([
 });
 
 test.each([
-  ["payment_expired", "หมดเวลาชำระเงิน", "หมดเวลาชำระเงิน"],
-  ["seller_confirmation_expired", "หมดเวลายืนยันคำสั่งซื้อ (คืนเงินแล้ว)", "หมดเวลาผู้ขายยืนยัน"],
-])("%s shows a distinct terminal label and filter", async (status, label, filter) => {
+  ["payment_expired", "หมดเวลาชำระเงิน"],
+  ["seller_confirmation_expired", "หมดเวลายืนยันคำสั่งซื้อ (คืนเงินแล้ว)"],
+])("%s shows a distinct terminal label and is listed under the cancelled filter", async (status, label) => {
   order.status = status;
   render(<MyOrders />);
   expect(await screen.findByText(label, { selector: "span" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: filter }));
-  await waitFor(() => expect(apiFetch.mock.calls.some(([url]) => url.includes(`status=${status}`))).toBe(true));
+  fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+  await waitFor(() => expect(apiFetch.mock.calls.some(([url]) => url.includes("status=cancelled%2Cpayment_expired%2Cseller_confirmation_expired"))).toBe(true));
   expect(screen.queryByRole("link", { name: /ไปชำระเงิน/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument();
 });

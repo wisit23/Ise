@@ -79,7 +79,7 @@ async function mine(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 10);
     const { status } = req.query;
-    if (status && !orderModel.VALID_STATUSES.includes(status)) {
+    if (status && !status.split(",").every((s) => orderModel.VALID_STATUSES.includes(s))) {
       throw badRequest(
         `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
       );

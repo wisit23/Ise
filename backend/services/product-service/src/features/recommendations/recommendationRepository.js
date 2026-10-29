@@ -1,8 +1,15 @@
 const prisma = require("../../models/prismaClient");
 const { Prisma } = require("../../generated/prisma-client");
 const { toApiShape } = require("../../models/productModel");
-const { RULES, explanation } = require("./recommendationRules");
+const { RULES, explanation, repeatCapFor } = require("./recommendationRules");
 const { buildCatalogWhere } = require("../catalog/catalogQuery");
+
+// Personal slots are drawn at random, weighted by score (weighted sampling
+// without replacement, Efraimidis-Spirakis: order by ln(u) / weight). The
+// uniform draw u comes from md5(id + seed), so one seed keeps every page of a
+// browsing session in a single fixed order. The floor gives zero-score items a
+// small chance instead of none.
+const PERSONAL_WEIGHT_FLOOR = 0.5;
 
 function createRecommendationRepository(db, sql = Prisma) {
   function oneOf(expression, values) {
@@ -37,10 +44,15 @@ function createRecommendationRepository(db, sql = Prisma) {
     )`;
   }
 
-  function behaviorScore(signals, value) {
-    return signals.length
-      ? sql.sql`GREATEST(${sql.join(signals.map((signal) => value(signal)))})`
-      : sql.sql`0::double precision`;
+  // Search keeps its single best match. Activity signals accumulate, so
+  // repeating the same kind of purchase, like or view raises the score, up to
+  // the rule's repeat cap.
+  function behaviorScore(signals, value, cap) {
+    if (!signals.length) return sql.sql`0::double precision`;
+    const values = signals.map((signal) => value(signal));
+    return cap === undefined
+      ? sql.sql`GREATEST(${sql.join(values)})`
+      : sql.sql`LEAST(${sql.join(values, " + ")}, ${cap}::double precision)`;
   }
 
   async function list({
@@ -79,10 +91,26 @@ function createRecommendationRepository(db, sql = Prisma) {
             " AND ",
           )}) THEN ${signal.weight}::double precision ELSE 0 END`,
       ),
-      like: behaviorScore(behavior.likes || [], similarityScore),
-      productView: behaviorScore(behavior.productViews || [], similarityScore),
-      videoView: behaviorScore(behavior.videoViews || [], similarityScore),
-      purchase: behaviorScore(behavior.purchases || [], similarityScore),
+      like: behaviorScore(
+        behavior.likes || [],
+        similarityScore,
+        repeatCapFor("like"),
+      ),
+      productView: behaviorScore(
+        behavior.productViews || [],
+        similarityScore,
+        repeatCapFor("productView"),
+      ),
+      videoView: behaviorScore(
+        behavior.videoViews || [],
+        similarityScore,
+        repeatCapFor("videoView"),
+      ),
+      purchase: behaviorScore(
+        behavior.purchases || [],
+        similarityScore,
+        repeatCapFor("purchase"),
+      ),
     };
     const score = sql.join(
       RULES.map(({ key, weight, behavioral }) =>
@@ -134,9 +162,10 @@ function createRecommendationRepository(db, sql = Prisma) {
         FROM discovery_pool
       ), positioned AS (
         SELECT *, row_number() OVER (PARTITION BY bucket ORDER BY
-          CASE WHEN bucket = 'personal' THEN score ELSE 0 END DESC,
+          CASE WHEN bucket = 'personal' THEN ln(
+            ((('x' || substr(md5(id || ${seed} || 'pick'), 1, 13))::bit(52)::bigint + 1)::double precision / 4503599627370496)
+          ) / (score + ${PERSONAL_WEIGHT_FLOOR}::double precision) ELSE 0 END DESC,
           CASE WHEN bucket = 'new' THEN new_rank WHEN bucket = 'discovery' THEN discovery_rank ELSE 0 END,
-          CASE WHEN bucket = 'personal' THEN md5(id || ${seed} || 'ties') ELSE '' END,
           created_at DESC, id ASC) AS bucket_position
         FROM grouped
       ) SELECT * FROM positioned

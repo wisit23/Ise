@@ -52,6 +52,13 @@ const ORDER_STATUSES = [
     badgeColor: "bg-sky-100 text-sky-800",
   },
   {
+    key: "preparing",
+    statuses: ["confirmed", "ready_to_ship"],
+    label: "กำลังเตรียมสินค้า",
+    icon: "package_2",
+    badgeColor: "bg-sky-100 text-sky-800",
+  },
+  {
     key: "pickup_in_progress",
     statuses: ["pickup_in_progress"],
     label: "ขนส่งกำลังเข้ารับสินค้า",
@@ -66,15 +73,8 @@ const ORDER_STATUSES = [
     badgeColor: "bg-indigo-100 text-indigo-800",
   },
   {
-    key: "delivered",
-    statuses: ["delivered"],
-    label: "รอยืนยันรับ",
-    icon: "inventory",
-    badgeColor: "bg-violet-100 text-violet-800",
-  },
-  {
     key: "completed",
-    statuses: ["completed"],
+    statuses: ["delivered", "completed"],
     label: "สำเร็จ",
     icon: "check_circle",
     badgeColor: "bg-emerald-100 text-emerald-800",
@@ -470,7 +470,7 @@ function ProfileContent() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
               {ORDER_STATUSES.map((st) => {
                 const count = statusCounts[st.key] || 0;
                 return (

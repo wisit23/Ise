@@ -2,7 +2,6 @@
 
 import { formatReferenceCode } from "../../lib/referenceCodes";
 
-
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
@@ -54,7 +53,7 @@ export default function CheckoutPage() {
   }
 
   async function updateVoucher(order, campaignId) {
-    if (cartSeconds <= 0)
+    if (secondsByOrder(order) <= 0)
       throw new Error("เวลาจองสินค้าหมดแล้ว กรุณากลับไปเลือกสินค้าใหม่");
     setUpdatingOrderId(order.id);
     setError("");
@@ -149,22 +148,24 @@ export default function CheckoutPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const expiresAt = useMemo(() => {
-    const deadlines = orders
-      .map(orderDeadline)
-      .filter(Boolean)
-      .map((value) => new Date(value).getTime());
-    return deadlines.length
-      ? new Date(Math.min(...deadlines)).toISOString()
-      : null;
-  }, [orders]);
-  const cartSeconds = remainingSeconds(expiresAt, now);
-  const subtotal = orders.reduce((sum, order) => sum + order.price, 0);
-  const discount = orders.reduce(
+  // Each item counts down on its own; an expired item drops out of the
+  // payable set while the rest stay payable.
+  const secondsByOrder = (order) => remainingSeconds(orderDeadline(order), now);
+  // An auction item unpaid after its 24 hours is dropped from the page; the
+  // expired-auction notice only shows when nothing else is left to pay for.
+  const isExpiredAuction = (order) =>
+    (order.orderType === "AUCTION" || order.auctionId) &&
+    (order.status === "cancelled" || secondsByOrder(order) <= 0);
+  const visibleOrders = orders.filter((order) => !isExpiredAuction(order));
+  const activeOrders = visibleOrders.filter(
+    (order) => secondsByOrder(order) > 0,
+  );
+  const subtotal = activeOrders.reduce((sum, order) => sum + order.price, 0);
+  const discount = activeOrders.reduce(
     (sum, order) => sum + (order.discountAmount || 0),
     0,
   );
-  const total = orders.reduce(
+  const total = activeOrders.reduce(
     (sum, order) =>
       sum +
       (order.finalPrice === null || order.finalPrice === undefined
@@ -176,9 +177,9 @@ export default function CheckoutPage() {
     (address) => address.id === selectedAddressId,
   );
   const voucherOrder = orders.find((order) => order.id === voucherOrderId);
-  const expiredAuctionOrder = orders.find(
-    (order) => order.orderType === "AUCTION" && order.status === "cancelled",
-  );
+  const expiredAuctionOrder = visibleOrders.length
+    ? undefined
+    : orders.find(isExpiredAuction);
 
   function addressesChanged(updated, selectedId) {
     setAddresses(updated);
@@ -198,7 +199,7 @@ export default function CheckoutPage() {
       setError("กรุณาเลือกที่อยู่จัดส่ง");
       return;
     }
-    if (cartSeconds <= 0) {
+    if (activeOrders.length === 0) {
       setError("เวลาจองสินค้าในตะกร้าหมดแล้ว กรุณากลับไปเลือกสินค้าใหม่");
       return;
     }
@@ -210,7 +211,7 @@ export default function CheckoutPage() {
         method: "POST",
         token: getAccessToken(),
         body: {
-          orderIds: orders.map((order) => order.id),
+          orderIds: activeOrders.map((order) => order.id),
           addressId: selectedAddress.id,
           shippingAddress: selectedAddress,
         },
@@ -251,10 +252,6 @@ export default function CheckoutPage() {
             <p className="mt-1 text-sm text-amber-800">
               หน้านี้ใช้เวลาจองต่อเนื่องจากตะกร้า กรุณาตรวจสอบข้อมูลก่อนหมดเวลา
             </p>
-          </div>
-          <div className="flex items-center gap-2 text-2xl font-bold tabular-nums text-amber-700">
-            <span className="material-symbols-outlined">timer</span>
-            {formatCheckoutCountdown(cartSeconds)}
           </div>
         </div>
 
@@ -365,7 +362,7 @@ export default function CheckoutPage() {
               <section className="overflow-hidden rounded-xl border border-line bg-white shadow-1">
                 <div className="border-b border-line px-5 py-4">
                   <h2 className="font-bold text-gray-900">
-                    รายการสินค้า ({orders.length})
+                    รายการสินค้า ({visibleOrders.length})
                   </h2>
                   <p className="mt-1 text-sm text-ink-muted">
                     เลือกโค้ดส่วนลดได้ 1 โค้ดต่อสินค้า 1 ชิ้น
@@ -384,57 +381,79 @@ export default function CheckoutPage() {
                   )}
                 </div>
                 <div className="divide-y divide-line">
-                  {orders.map((order) => (
-                    <div key={order.id}>
-                      <OrderLine order={order} />
-                      <div className="px-5 pb-4">
-                        <button
-                          type="button"
-                          className="focus-ring inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 disabled:opacity-50"
-                          aria-haspopup="dialog"
-                          aria-label={`เลือกโค้ดส่วนลดสำหรับ ${order.productTitle}`}
-                          disabled={
-                            submitting ||
-                            Boolean(updatingOrderId) ||
-                            cartSeconds <= 0 ||
-                            Boolean(order.checkoutId) ||
-                            Boolean(order.auctionId)
-                          }
-                          onClick={() => {
-                            setVoucherOrderId(order.id);
-                            loadVouchers();
-                          }}
-                        >
+                  {visibleOrders.map((order) => {
+                    const seconds = secondsByOrder(order);
+                    const itemExpired = seconds <= 0;
+                    return (
+                      <div
+                        key={order.id}
+                        className={itemExpired ? "opacity-60" : undefined}
+                      >
+                        <OrderLine order={order} />
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 pb-4">
                           <span
-                            aria-hidden="true"
-                            className="material-symbols-outlined text-[18px]"
+                            className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums ${
+                              itemExpired ? "text-red-600" : "text-amber-700"
+                            }`}
                           >
-                            confirmation_number
+                            <span
+                              aria-hidden="true"
+                              className="material-symbols-outlined text-[16px]"
+                            >
+                              {itemExpired ? "timer_off" : "timer"}
+                            </span>
+                            {itemExpired
+                              ? "หมดเวลาจอง · ไม่รวมในยอดชำระ"
+                              : `เหลือเวลา ${formatCheckoutCountdown(seconds)}`}
                           </span>
-                          {order.campaignCode
-                            ? `โค้ด ${order.campaignCode} · เปลี่ยนโค้ด`
-                            : "เลือกโค้ดส่วนลด"}
-                        </button>
-                        {updatingOrderId === order.id ? (
-                          <p
-                            role="status"
-                            className="mt-2 text-xs text-ink-muted"
+                          <button
+                            type="button"
+                            className="focus-ring inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 disabled:opacity-50"
+                            aria-haspopup="dialog"
+                            aria-label={`เลือกโค้ดส่วนลดสำหรับ ${order.productTitle}`}
+                            disabled={
+                              submitting ||
+                              Boolean(updatingOrderId) ||
+                              itemExpired ||
+                              Boolean(order.checkoutId) ||
+                              Boolean(order.auctionId)
+                            }
+                            onClick={() => {
+                              setVoucherOrderId(order.id);
+                              loadVouchers();
+                            }}
                           >
-                            กำลังตรวจสอบโค้ดและคำนวณราคา…
-                          </p>
-                        ) : (
-                          order.campaignId && (
-                            <p className="mt-2 text-sm text-emerald-700">
-                              ส่วนลดสินค้าชิ้นนี้ -฿
-                              {(order.discountAmount || 0).toLocaleString(
-                                "th-TH",
-                              )}
+                            <span
+                              aria-hidden="true"
+                              className="material-symbols-outlined text-[18px]"
+                            >
+                              confirmation_number
+                            </span>
+                            {order.campaignCode
+                              ? `โค้ด ${order.campaignCode} · เปลี่ยนโค้ด`
+                              : "เลือกโค้ดส่วนลด"}
+                          </button>
+                          {updatingOrderId === order.id ? (
+                            <p
+                              role="status"
+                              className="w-full text-xs text-ink-muted"
+                            >
+                              กำลังตรวจสอบโค้ดและคำนวณราคา…
                             </p>
-                          )
-                        )}
+                          ) : (
+                            order.campaignId && (
+                              <p className="w-full text-sm text-emerald-700">
+                                ส่วนลดสินค้าชิ้นนี้ -฿
+                                {(order.discountAmount || 0).toLocaleString(
+                                  "th-TH",
+                                )}
+                              </p>
+                            )
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             </div>
@@ -472,8 +491,7 @@ export default function CheckoutPage() {
                 loading={submitting}
                 disabled={
                   !selectedAddress ||
-                  cartSeconds <= 0 ||
-                  orders.length === 0 ||
+                  activeOrders.length === 0 ||
                   Boolean(updatingOrderId) ||
                   addressBusy ||
                   addressModalOpen ||

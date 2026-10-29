@@ -168,7 +168,7 @@ describe("ProfilePage", () => {
         return Promise.resolve({
           ...ORDERS_RESPONSE,
           items: ORDERS_RESPONSE.items.filter(
-            (order) => !status || order.status === status,
+            (order) => !status || status.split(",").includes(order.status),
           ),
         });
       }
@@ -397,7 +397,7 @@ describe("ProfilePage", () => {
         return Promise.resolve({
           ...ORDERS_RESPONSE,
           items: ORDERS_RESPONSE.items.filter(
-            (order) => !status || order.status === status,
+            (order) => !status || status.split(",").includes(order.status),
           ),
           totalPages: 2,
         });
@@ -418,7 +418,7 @@ describe("ProfilePage", () => {
     fireEvent.click(orders.getByRole("button", { name: "สำเร็จ" }));
     await waitFor(() =>
       expect(apiFetch).toHaveBeenCalledWith(
-        "/api/orders/mine?page=1&limit=8&status=completed",
+        "/api/orders/mine?page=1&limit=8&status=delivered%2Ccompleted",
         { token: "test-token" },
       ),
     );
@@ -460,8 +460,8 @@ describe("ProfilePage", () => {
     ["รอผู้ขายยืนยัน", "paid"],
     ["ขนส่งกำลังเข้ารับสินค้า", "pickup_in_progress"],
     ["กำลังจัดส่ง", "in_transit"],
-    ["รอยืนยันรับ", "delivered"],
-    ["สำเร็จ", "completed"],
+    ["กำลังเตรียมสินค้า", "confirmed%2Cready_to_ship"],
+    ["สำเร็จ", "delivered%2Ccompleted"],
   ])(
     "opens the matching shared filter from the %s shortcut",
     async (label, status) => {
@@ -484,7 +484,7 @@ describe("ProfilePage", () => {
         expect(
           await orders.findByText("เสื้อเชิ้ตจากฐานข้อมูล"),
         ).toBeInTheDocument();
-      } else if (status === "completed") {
+      } else if (status === "delivered%2Ccompleted") {
         expect(
           await orders.findByText("กระเป๋าที่ซื้อสำเร็จ"),
         ).toBeInTheDocument();

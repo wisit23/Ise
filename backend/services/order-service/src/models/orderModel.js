@@ -161,7 +161,8 @@ async function list(where, { skip, take } = {}) {
   return { items: items.map(view), total };
 }
 function statusFilter(status) {
-  return status;
+  // A comma-separated list groups statuses into one filter (e.g. "delivered,completed").
+  return status.includes(",") ? { in: status.split(",") } : status;
 }
 function listByBuyer(buyerId, options = {}) {
   const { status } = options;

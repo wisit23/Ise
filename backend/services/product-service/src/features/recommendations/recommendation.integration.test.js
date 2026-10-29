@@ -7,7 +7,11 @@ const prisma = require("../../models/prismaClient");
 const {
   createRecommendationRepository,
 } = require("./recommendationRepository");
-const { normalizeProfile, weightFor } = require("./recommendationRules");
+const {
+  normalizeProfile,
+  weightFor,
+  repeatCapFor,
+} = require("./recommendationRules");
 const { createBehaviorRepository } = require("./behaviorRepository");
 
 test("configured weights change PostgreSQL ranking and response explanations together", async (t) => {
@@ -355,13 +359,29 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
           browse.items.slice(0, 4).map((item) => item.recommendation.bucket),
           ["personal", "new", "personal", "discovery"],
         );
-        const personalScores = browse.items
-          .filter((item) => item.recommendation.bucket === "personal")
-          .map((item) => item.recommendation.score);
-        assert.deepEqual(
-          personalScores,
-          [...personalScores].sort((a, b) => b - a),
-        );
+        // Personal slots are a seeded weighted draw, not a strict score sort:
+        // high scores come first far more often, yet order can vary by seed.
+        const positions = { high: [], none: [] };
+        let sawUnsorted = false;
+        for (let run = 0; run < 30; run += 1) {
+          const drawn = await repo.list({ ...args, seed: `weighted-${run}` });
+          const personal = drawn.items.filter(
+            (item) => item.recommendation.bucket === "personal",
+          );
+          const scores = personal.map((item) => item.recommendation.score);
+          if (scores.some((score, i) => i > 0 && score > scores[i - 1]))
+            sawUnsorted = true;
+          personal.forEach((item, index) => {
+            const score = item.recommendation.score;
+            const position = index / personal.length;
+            if (score >= 14) positions.high.push(position);
+            else if (score === 0) positions.none.push(position);
+          });
+        }
+        const mean = (values) =>
+          values.reduce((sum, value) => sum + value, 0) / values.length;
+        assert.ok(mean(positions.high) + 0.3 < mean(positions.none));
+        assert.ok(sawUnsorted);
         assert.deepEqual(
           browse.items.map((item) => item.id),
           sameBrowse.items.map((item) => item.id),
@@ -425,6 +445,68 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
           queryOne.items.map((item) => item.id),
           queryTwo.items.map((item) => item.id),
         );
+        throw rollback;
+      },
+      { timeout: 20000 },
+    );
+  } catch (error) {
+    if (error !== rollback) throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("repeated purchase signals add up to the repeat cap", async (t) => {
+  if (!process.env.DATABASE_URL_PRODUCT && !process.env.DATABASE_URL) {
+    if (process.env.REQUIRE_INTEGRATION === "1")
+      throw new Error("Test database URL required");
+    t.skip("Set DATABASE_URL_PRODUCT to run PostgreSQL verification");
+    return;
+  }
+  const rollback = new Error("rollback repeat fixtures");
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const key = randomUUID();
+        const category = `repeat-category-${key}`;
+        const brand = `repeat-brand-${key}`;
+        const condition = `repeat-condition-${key}`;
+        await tx.condition.create({ data: { value: condition, label: "Test" } });
+        const product = await tx.product.create({
+          data: {
+            title: "Repeat purchase fixture",
+            sellerId: `repeat-seller-${key}`,
+            category,
+            brand,
+            tags: [],
+            size: "M",
+            price: 100,
+            condition,
+          },
+        });
+        const repo = createRecommendationRepository(tx);
+        const bought = normalizeProfile({ categories: [category], brands: [brand] });
+        const scoreWith = async (count) => {
+          const result = await repo.list({
+            userId: `repeat-buyer-${key}`,
+            skip: 0,
+            take: await tx.product.count(),
+            profile: normalizeProfile(),
+            behavior: {
+              purchases: Array.from({ length: count }, () => ({
+                profile: bought,
+                weight: weightFor("purchase"),
+              })),
+            },
+          });
+          return result.items.find((item) => item.id === product.id)
+            .recommendation.score;
+        };
+        const single = weightFor("purchase") * 0.8;
+        assert.equal(await scoreWith(1), single);
+        assert.equal(await scoreWith(2), single * 2);
+        // Further repeats stop at twice the purchase weight.
+        assert.equal(await scoreWith(5), repeatCapFor("purchase"));
         throw rollback;
       },
       { timeout: 20000 },

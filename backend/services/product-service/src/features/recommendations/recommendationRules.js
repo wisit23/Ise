@@ -55,6 +55,24 @@ function weightFor(key) {
   return RULES.find((rule) => rule.key === key).weight;
 }
 
+// Repeated like / view / purchase signals add up, but never beyond this many
+// times the signal's own weight, so one habit cannot swamp the whole score.
+let repeatCapMultiplier = 2;
+const rawRepeatCap = process.env.RECOMMENDATION_REPEAT_CAP;
+if (rawRepeatCap !== undefined && rawRepeatCap.trim() !== "") {
+  const multiplier = Number(rawRepeatCap);
+  if (!Number.isFinite(multiplier) || multiplier < 1) {
+    throw new Error(
+      "RECOMMENDATION_REPEAT_CAP must be a finite number of at least 1",
+    );
+  }
+  repeatCapMultiplier = multiplier;
+}
+
+function repeatCapFor(key) {
+  return weightFor(key) * repeatCapMultiplier;
+}
+
 function normalize(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -101,6 +119,7 @@ function explanation(matches) {
 module.exports = {
   RULES,
   weightFor,
+  repeatCapFor,
   normalizeProfile,
   hasPreferences,
   explanation,

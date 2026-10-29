@@ -77,3 +77,33 @@ test("unset or blank env uses defaults; invalid weights fail with the setting na
     );
   }
 });
+
+test("repeat cap defaults to twice each weight, is configurable, and rejects values below 1", () => {
+  const ok = run(
+    { RECOMMENDATION_REPEAT_CAP: "3" },
+    `
+    const assert = require('node:assert/strict');
+    const { repeatCapFor } = require('./recommendationRules');
+    assert.equal(repeatCapFor('purchase'), 30);
+  `,
+  );
+  assert.equal(ok.status, 0, ok.stderr);
+  const defaults = run(
+    {},
+    `
+    const assert = require('node:assert/strict');
+    const { repeatCapFor } = require('./recommendationRules');
+    assert.equal(repeatCapFor('purchase'), 20);
+    assert.equal(repeatCapFor('like'), 16);
+  `,
+  );
+  assert.equal(defaults.status, 0, defaults.stderr);
+  for (const value of ["0.5", "NaN", "abc"]) {
+    const result = run(
+      { RECOMMENDATION_REPEAT_CAP: value },
+      "require('./recommendationRules')",
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /RECOMMENDATION_REPEAT_CAP/);
+  }
+});

@@ -19,8 +19,8 @@ test("checkout uses server time when the browser clock is three seconds behind",
   const clock = serverClock.serverNow.mockReturnValue(start);
   try {
     render(<CheckoutPage />);
-    expect(await screen.findByText("10:00")).toBeInTheDocument();
-    expect(screen.queryByText("10:03")).not.toBeInTheDocument();
+    expect(await screen.findByText("เหลือเวลา 10:00")).toBeInTheDocument();
+    expect(screen.queryByText("เหลือเวลา 10:03")).not.toBeInTheDocument();
   } finally {
     clock.mockImplementation(() => Date.now());
     localClock.mockRestore();
@@ -117,6 +117,67 @@ test("shows the Marketing voucher and its server-calculated order summary", asyn
   expect(screen.getByText("฿800")).toBeInTheDocument();
 });
 
+test("counts each item separately and pays only the items that have not expired", async () => {
+  window.history.replaceState(null, "", "/checkout?orders=order-1,order-2");
+  const EXPIRED = {
+    ...ORDER,
+    id: "order-2",
+    productTitle: "กางเกงยีนส์",
+    price: 500,
+    campaignId: null,
+    campaignCode: null,
+    discountAmount: 0,
+    finalPrice: 500,
+    reservationExpiresAt: "2020-01-01T00:00:00.000Z",
+  };
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-2"
+      ? Promise.resolve(EXPIRED)
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+
+  expect(await screen.findByText(/หมดเวลาจอง/)).toBeInTheDocument();
+  expect(screen.getAllByText(/เหลือเวลา/)).toHaveLength(1);
+  expect(screen.getByText("฿800")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันและไปสแกน QR" }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/payment/session-1"));
+  expect(apiFetch).toHaveBeenCalledWith(
+    "/api/orders/checkout-sessions",
+    expect.objectContaining({
+      body: expect.objectContaining({ orderIds: ["order-1"] }),
+    }),
+  );
+});
+
+test("drops an unpaid expired auction item and keeps the other items payable", async () => {
+  window.history.replaceState(null, "", "/checkout?orders=order-1,order-2");
+  const AUCTION = {
+    ...ORDER,
+    id: "order-2",
+    productTitle: "นาฬิกาประมูล",
+    orderType: "AUCTION",
+    auctionId: "auction-1",
+    status: "cancelled",
+    reservationExpiresAt: null,
+  };
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-2"
+      ? Promise.resolve(AUCTION)
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+
+  expect(await screen.findByText("เสื้อแจ็คเก็ตวินเทจ")).toBeInTheDocument();
+  expect(screen.queryByText("นาฬิกาประมูล")).not.toBeInTheDocument();
+  expect(screen.queryByText("สิทธิ์ในการชำระเงินสิ้นสุดแล้ว")).not.toBeInTheDocument();
+  expect(screen.getByText("รายการสินค้า (1)")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "ยืนยันและไปสแกน QR" })).toBeEnabled();
+});
+
 test("returns straight to the QR page when the order already has an open payment session", async () => {
   const original = apiFetch.getMockImplementation();
   apiFetch.mockImplementation((path, options) =>
@@ -179,10 +240,9 @@ test("shows an expired auction message without a payment action for a cancelled 
     screen.queryByRole("button", { name: "ยืนยันและไปสแกน QR" }),
   ).not.toBeInTheDocument();
   expect(replace).not.toHaveBeenCalled();
-  expect(screen.getByRole("link", { name: "ดูประวัติคำสั่งซื้อ" })).toHaveAttribute(
-    "href",
-    "/orders",
-  );
+  expect(
+    screen.getByRole("link", { name: "ดูประวัติคำสั่งซื้อ" }),
+  ).toHaveAttribute("href", "/orders");
 });
 
 test("entering checkout creates orders from cart reservations before confirming payment", async () => {

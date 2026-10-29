@@ -129,7 +129,9 @@ export default function StoreContent({ sellerId, embedded = false }) {
     if (!payload?.product?.id) return;
     const prod = payload.product;
     if (prod.sellerId && String(prod.sellerId) === String(sellerId)) {
-      setItems((prev) => (prev.some((p) => p.id === prod.id) ? prev : [prod, ...prev]));
+      setItems((prev) =>
+        prev.some((p) => p.id === prod.id) ? prev : [prod, ...prev],
+      );
       setProductTotal((prev) => prev + 1);
     }
   });
@@ -138,7 +140,7 @@ export default function StoreContent({ sellerId, embedded = false }) {
     if (!payload?.product?.id) return;
     const updated = payload.product;
     setItems((prev) =>
-      prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+      prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
     );
   });
 
@@ -157,11 +159,17 @@ export default function StoreContent({ sellerId, embedded = false }) {
   const ShopHeading = embedded ? "h2" : "h1";
 
   return (
-    <Container className={embedded ? "overflow-hidden rounded-xl border border-slate-200 bg-white" : "flex min-h-screen flex-col bg-gray-50"}>
+    <Container
+      className={
+        embedded
+          ? "overflow-hidden rounded-xl border border-slate-200 bg-white"
+          : "flex min-h-screen flex-col bg-gray-50"
+      }
+    >
       {!embedded && <NavBar />}
 
       <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 py-6 sm:py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-start gap-4 px-4 py-6 sm:flex-row sm:gap-8 sm:py-8">
           <div className="flex items-center gap-4">
             <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-2xl font-semibold text-emerald-700">
               {sellerName?.[0] || "?"}
@@ -183,11 +191,39 @@ export default function StoreContent({ sellerId, embedded = false }) {
                   <span>ยังไม่มีรีวิว</span>
                 )}
                 <span>· สินค้าทั้งหมด {productTotal} รายการ</span>
+                {user !== undefined && !isOwner && (
+                  <>
+                    {/* Chat is scoped to one PRODUCT conversation per pair this
+                      round (see chat-service's contextKey design) — there's no
+                      "message this seller in general" endpoint yet, so this
+                      opens/reopens the conversation about their first listed
+                      item. Hidden entirely for a store with no products, since
+                      there's nothing to anchor a conversation to. */}
+                    {items.length > 0 && (
+                      <ContactSellerButton
+                        productId={items[0].id}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    )}
+                    <button
+                      onClick={() => setShowReport(true)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-red-500 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="material-symbols-outlined text-[18px]"
+                      >
+                        flag
+                      </span>
+                      รายงานร้านค้านี้
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap shrink-0 items-center gap-3">
-            {isOwner && (
+          {isOwner && (
+            <div className="flex flex-wrap shrink-0 items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowEditModal(true)}
@@ -198,30 +234,8 @@ export default function StoreContent({ sellerId, embedded = false }) {
                 </span>
                 แก้ไขข้อมูลร้านค้า
               </button>
-            )}
-            {user !== undefined && !isOwner && (
-              <>
-                {/* Chat is scoped to one PRODUCT conversation per pair this
-                  round (see chat-service's contextKey design) — there's no
-                  "message this seller in general" endpoint yet, so this
-                  opens/reopens the conversation about their first listed
-                  item. Hidden entirely for a store with no products, since
-                  there's nothing to anchor a conversation to. */}
-                {items.length > 0 && (
-                  <ContactSellerButton
-                    productId={items[0].id}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                )}
-                <button
-                  onClick={() => setShowReport(true)}
-                  className="text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
-                >
-                  รายงานร้านค้านี้
-                </button>
-              </>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -234,7 +248,8 @@ export default function StoreContent({ sellerId, embedded = false }) {
               </span>
               <div>
                 <p className="font-semibold text-amber-900">
-                  คำขอแก้ไขข้อมูลร้านค้าของคุณอยู่ระหว่างรอ Trust and Safety ตรวจสอบ
+                  คำขอแก้ไขข้อมูลร้านค้าของคุณอยู่ระหว่างรอ Trust and Safety
+                  ตรวจสอบ
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
                   ยื่นเมื่อ{" "}
@@ -286,11 +301,11 @@ export default function StoreContent({ sellerId, embedded = false }) {
                 className="rounded-lg border border-gray-200 bg-white p-4"
               >
                 <p className="mb-2 text-sm font-medium text-ink">
-                  {r.reviewerName || r.buyerName || (
-                    r.buyerId
+                  {r.reviewerName ||
+                    r.buyerName ||
+                    (r.buyerId
                       ? `ผู้ซื้อ (${r.buyerId.slice(0, 4)}***${r.buyerId.slice(-4)})`
-                      : "ผู้ซื้อทั่วไป"
-                  )}
+                      : "ผู้ซื้อทั่วไป")}
                 </p>
                 <div className="flex items-center justify-between">
                   <StarDisplay value={r.rating} />
@@ -298,7 +313,8 @@ export default function StoreContent({ sellerId, embedded = false }) {
                     <span className="text-xs text-gray-500">
                       {new Date(r.createdAt).toLocaleDateString("th-TH")}
                     </span>
-                    {user !== undefined && user?.id !== r.buyerId && (
+                    {user !== undefined &&
+                      user?.id !== r.buyerId &&
                       (() => {
                         const isReported = reportedReviewIds.includes(r.id);
                         return (
@@ -333,9 +349,7 @@ export default function StoreContent({ sellerId, embedded = false }) {
                             <span>{isReported ? "รายงานแล้ว" : "รายงาน"}</span>
                           </button>
                         );
-                      })()
-                    )}
-
+                      })()}
                   </div>
                 </div>
                 {r.comment && (
