@@ -16,7 +16,8 @@ function fixture() {
 
 test("disabled exception preserves the blocking release audit", () => {
   const { audit, lock } = fixture();
-  assert.deepEqual(evaluate(audit, lock, policy).blocked, ["sharp"]);
+  const disabled = { sharp0345: { ...policy.sharp0345, enabled: false } };
+  assert.deepEqual(evaluate(audit, lock, disabled).blocked, ["sharp"]);
 });
 
 test("explicit policy accepts only the reviewed Sharp findings at version 0.34.5", () => {

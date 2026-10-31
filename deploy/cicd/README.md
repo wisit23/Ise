@@ -40,8 +40,8 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
 5. **Audit:** CI และ release ใช้ `scripts/ci/release-audit.cjs` ตรวจ production dependencies
    และบล็อก high/critical ตัวตรวจใช้ npm audit JSON ไม่ใช้ `--force` หรือข้าม audit errors
    VM CPU ต้องใช้ Sharp 0.34.5 ทั้ง frontend/product; pin ผ่าน root override และ lockfile
-   policy ที่เสนออยู่ใน `scripts/ci/release-audit-policy.json` และยังปิดข้อยกเว้นไว้
-   จนผู้ใช้อนุมัติ ข้อยกเว้นรับได้เฉพาะ 3 advisory ที่ระบุบน Sharp 0.34.5 และผลกระทบ
+   ผู้ใช้อนุมัติข้อยกเว้นใน `scripts/ci/release-audit-policy.json` เมื่อ 2026-11-01
+   ข้อยกเว้นรับได้เฉพาะ 3 advisory ที่ระบุบน Sharp 0.34.5 และผลกระทบ
    ทาง dependency ที่มาจาก Sharp เท่านั้น direct advisory อื่นหรือ critical ยังบล็อก
    การยอมรับข้อยกเว้นไม่ใช่การแก้ช่องโหว่ ต้องถอนหลังมี patched runtime ที่รองรับ CPU
 6. **Deployment boundary:** ไม่มี Actions runner บน production งาน build และอนุมัติ

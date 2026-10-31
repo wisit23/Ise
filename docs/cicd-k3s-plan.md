@@ -24,6 +24,7 @@
 - release audit ของ 0.34.5 มี 3 advisory ที่ทราบอยู่ ต้องตกลงข้อยกเว้นเฉพาะรายการก่อนเปิด release gate โดยไม่ข้าม findings อื่น
 - ผู้ใช้กำหนดใหม่ให้แก้ใน branch `staging` ก่อน และนำเข้า main เมื่อผ่าน checks ครบเท่านั้น; ไม่มีการแก้ main เพิ่มหลังคำสั่งนี้
 - root override pin Sharp `~0.34.5` ทั้ง frontend/product; npm ci dry-run ผ่าน ตัวตรวจ audit และ policy exception ที่ยัง disabled เตรียมไว้บน staging
+- ผู้ใช้อนุมัติข้อยกเว้นเฉพาะ 3 advisory ของ Sharp 0.34.5 แล้ว เปิดเฉพาะ policy นี้บน staging; high/critical อื่นยังบล็อก และห้ามนำเข้า main ก่อน staging checks ผ่านครบ
 
 วันที่: 2026-10-27
 

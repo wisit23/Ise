@@ -1,6 +1,7 @@
 {
   "sharp0345": {
-    "enabled": false,
+    "enabled": true,
+    "approval": "User explicitly approved only the Sharp 0.34.5 exception on 2026-11-01, with staging checks required before main.",
     "version": "0.34.5",
     "reason": "Production VM CPU cannot run Sharp 0.35.x. User requires 0.34.5. Remove this exception after a patched CPU-compatible runtime is verified.",
     "advisories": [
