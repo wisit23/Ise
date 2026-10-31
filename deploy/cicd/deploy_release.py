@@ -35,6 +35,10 @@ def configuration(path, environment):
     value = json.loads(path.read_text())
     contract.require(value.get("environment") == environment == "production", "Environment mismatch")
     contract.require(value.get("same_origin_verified") is True, "Verify same-origin API/WebSocket proxy before enabling CD")
+    contract.require(type(value.get("require_websocket", True)) is bool, "require_websocket must be a boolean")
+    if not value.get("require_websocket", True):
+        contract.require(isinstance(value.get("websocket_exception"), str) and value["websocket_exception"].strip(),
+                         "Polling-only deployment requires a documented WebSocket exception")
     contract.require(value.get("enabled") is True, "CD is disabled in server configuration")
     contract.require(value.get("namespace") == cloud.NAMESPACE, "This release path uses the existing reloop-production namespace")
     pull_budget(value)
@@ -98,7 +102,7 @@ class ReleaseDeployment(cloud.Deployment):
         elif previous_release:
             cloud.run(["git", "-C", str(self.root), "merge-base", "--is-ancestor", previous_release["commit"], commit])
         cloud.write_json(self.run_dir / "compose.json", self.config)
-        smoke.check(self.settings["public_url"])
+        smoke.check(self.settings["public_url"], require_websocket=self.settings.get("require_websocket", True))
 
     def install(self):
         # This calls only the existing-cluster validation: __init__ forbids first install.
@@ -166,7 +170,7 @@ class ReleaseDeployment(cloud.Deployment):
     def verify_deployment(self):
         super().verify_deployment()
         self.phase("public-smoke")
-        smoke.check(self.settings["public_url"])
+        smoke.check(self.settings["public_url"], require_websocket=self.settings.get("require_websocket", True))
         for name in cloud.APPS:
             deployed = json.loads(self.k("get", "deployment/" + name, "-o", "json", capture=True))
             cloud.need(deployed["spec"]["template"]["spec"]["containers"][0]["image"] == self.images[name],

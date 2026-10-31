@@ -103,6 +103,10 @@ sudo install -o root -g root -m 644 deploy/cicd/server.example.json /etc/ise-cic
 - `pull_secret`: ชื่อ Kubernetes registry Secret ที่มีสิทธิ์อ่านอย่างเดียว; ใช้ `null`
   หาก packages เป็น public และไม่ต้องใช้ credentials
 - `same_origin_verified`: true หลัง public smoke ผ่านกับ routing จริงเท่านั้น
+- `require_websocket`: true โดยปริยาย หากผู้ใช้อนุมัติยอมรับ HTTP polling เดิมของแชต
+  ให้ตั้ง false พร้อมบันทึกเหตุผลใน `websocket_exception`; เว็บ/API/polling ยังต้องผ่าน
+  WebSocket ที่ไม่ผ่านจะเป็น warning การตั้งค่านี้ไม่แก้หรือเปลี่ยน transport ของแอป
+  และต้องนำข้อยกเว้นออกเมื่อผู้ดูแล external proxy แก้ Upgrade แล้ว
 - `enabled`: true เมื่อ setup พร้อม
 - `migration_backup_verified`: false จนกว่าจะทดลอง off-VM restore, external-writer
   maintenance และติดตั้ง backup exporter ที่ตรวจแล้ว

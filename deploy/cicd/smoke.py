@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, build_opener
 
 
-def check(url):
+def check(url, *, require_websocket=True):
     parts = urlsplit(url)
     if (parts.scheme != "https" or not parts.hostname or parts.path not in ("", "/")
             or parts.username or parts.password or parts.query or parts.fragment):
@@ -28,6 +28,7 @@ def check(url):
     # Verify the proxy forwards an actual Upgrade, rather than only HTTP polling.
     key = base64.b64encode(os.urandom(16)).decode()
     connection = http.client.HTTPSConnection(parts.hostname, parts.port or 443, timeout=20)
+    websocket_ok = False
     try:
         connection.request("GET", "/api/chat/socket.io/?EIO=4&transport=websocket", headers={
             "Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
@@ -36,9 +37,16 @@ def check(url):
         expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
         if response.status != 101 or response.getheader("Sec-WebSocket-Accept") != expected:
             raise ValueError("Public proxy did not upgrade the chat WebSocket")
+        websocket_ok = True
+    except (OSError, http.client.HTTPException, ValueError) as error:
+        if require_websocket:
+            raise
+        print("WARNING: Public WebSocket check failed (" + type(error).__name__ +
+              "); the documented polling-only exception is active")
     finally:
         connection.close()
-    print("Public frontend, product feed, chat polling and WebSocket checks passed")
+    print("Public frontend, product feed and chat polling checks passed" +
+          ("; WebSocket check passed" if websocket_ok else "; WebSocket remains unavailable"))
 
 
 if __name__ == "__main__":

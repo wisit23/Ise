@@ -117,6 +117,15 @@ class DeploymentTests(unittest.TestCase):
         instance.check_disk_space = MagicMock()
         return instance
 
+    def test_polling_only_configuration_requires_a_documented_exception(self):
+        path = MagicMock()
+        path.stat.return_value.st_uid = 0
+        path.stat.return_value.st_mode = 0o100644
+        path.read_text.return_value = json.dumps({"environment": "production", "same_origin_verified": True,
+                                                 "require_websocket": False})
+        with self.assertRaisesRegex(ValueError, "documented WebSocket exception"):
+            deploy.configuration(path, "production")
+
     def test_no_first_install_or_incomplete_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)
@@ -357,6 +366,26 @@ class SmokeTests(unittest.TestCase):
             opener.return_value.open.side_effect = self.responses()
             connection.return_value.getresponse.return_value.status = 200
             with self.assertRaisesRegex(ValueError, "upgrade"):
+                smoke.check("https://site.test")
+
+    def test_approved_polling_exception_does_not_relax_http_checks(self):
+        connection = MagicMock()
+        connection.getresponse.return_value.status = 400
+        with patch.object(smoke, "build_opener") as opener, patch.object(smoke.http.client, "HTTPSConnection", return_value=connection):
+            opener.return_value.open.side_effect = self.responses()
+            smoke.check("https://site.test", require_websocket=False)
+            opener.return_value.open.side_effect = self.responses(feed=b"<html>broken route</html>")
+            with self.assertRaises(ValueError):
+                smoke.check("https://site.test", require_websocket=False)
+
+    def test_websocket_network_failure_is_tolerated_only_with_exception(self):
+        connection = MagicMock()
+        connection.getresponse.side_effect = OSError("proxy unavailable")
+        with patch.object(smoke, "build_opener") as opener, patch.object(smoke.http.client, "HTTPSConnection", return_value=connection):
+            opener.return_value.open.side_effect = self.responses()
+            smoke.check("https://site.test", require_websocket=False)
+            opener.return_value.open.side_effect = self.responses()
+            with self.assertRaises(OSError):
                 smoke.check("https://site.test")
 
 

@@ -8,6 +8,8 @@
   "namespace": "reloop-production",
   "public_url": "https://your-verified-frontend-origin.example",
   "same_origin_verified": false,
+  "require_websocket": true,
+  "websocket_exception": null,
   "pull_secret": "ghcr-read",
   "migration_backup_verified": false
 }
