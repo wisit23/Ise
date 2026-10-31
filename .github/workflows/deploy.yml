@@ -87,25 +87,49 @@ jobs:
 
   deploy:
     needs: prepare
-    # Dedicated management runner; never use these labels for PR/build jobs.
-    runs-on: [self-hosted, linux, x64, ise-deploy, ise-production]
+    name: Approve and request production deployment
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     # Configure required reviewers on this GitHub Environment before enabling CD.
     environment: production
-    timeout-minutes: 60
+    timeout-minutes: 5
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: deployment-input
           path: release-input
-      - name: Deploy using the root-owned VM command
+      - name: Publish approved deployment request
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           MODE: ${{ needs.prepare.outputs.mode }}
           MIGRATION: ${{ needs.prepare.outputs.migration }}
-        run: sudo -n /usr/local/sbin/ise-deploy production "$MODE" "$MIGRATION" < release-input/release.json
+          RELEASE_RUN: ${{ needs.prepare.outputs.release_run_id }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          manifest = Path('release-input/release.json').read_bytes()
+          request = {'version': 1, 'environment': 'production',
+            'deploy_run_id': int(os.environ['GITHUB_RUN_ID']),
+            'run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+            'release_run_id': int(os.environ['RELEASE_RUN']),
+            'mode': os.environ['MODE'], 'migrate': os.environ['MIGRATION'] == 'migrate',
+            'manifest_sha256': hashlib.sha256(manifest).hexdigest()}
+          Path('request.json').write_text(json.dumps(request) + '\n')
+          PY
+          tag="production-request-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" request.json release-input/release.json \
+            --target "$GITHUB_SHA" --title "Approved production request $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT" \
+            --notes "Approved deployment request. Actual deployment status is recorded in the VM journal, not this workflow result." \
+            --latest=false
       - name: Deployment summary
         if: always()
         env:
           STATE: ${{ job.status }}
           RELEASE_RUN: ${{ needs.prepare.outputs.release_run_id }}
         run: |
-          printf 'Environment: production\nResult: %s\nRelease run: %s\n' "$STATE" "$RELEASE_RUN" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Environment: production\nRequest publication: %s\nRelease run: %s\n' "$STATE" "$RELEASE_RUN" >> "$GITHUB_STEP_SUMMARY"
+          echo 'The VM checks approved requests every two minutes. Publication success does not mean deployment success. Check ise-pull.service and the private deployment journal on the VM.' >> "$GITHUB_STEP_SUMMARY"

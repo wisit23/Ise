@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for approved Ise releases every two minutes
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=120s
+RandomizedDelaySec=10s
+Persistent=true
+Unit=ise-pull.service
+
+[Install]
+WantedBy=timers.target

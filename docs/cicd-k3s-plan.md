@@ -1,5 +1,19 @@
 # แผน CI/CD สำหรับ Ise บน Cloud VM / K3s
 
+## งานต่อวันที่ 2026-11-01
+
+- ผู้ใช้อนุมัติให้ทำ CI/CD จนเสร็จ เชื่อม Web SSH ใหม่เมื่อ session หลุด และล้าง cache เมื่อพื้นที่ VM ไม่พอ
+- ผู้ใช้เลือก **VM ดึง release ที่ผ่าน GitHub production approval** แทน Actions runner บน production
+- แนวทาง runner ในบันทึกเก่าด้านล่างถูกแทนด้วย root-owned pull service และ public approved request; ไม่ติดตั้ง runner หรือ GitHub token บน VM
+- ตรวจสด: x86_64, พื้นที่ว่าง 17 GB, ทั้ง 10 pods Ready, server HEAD `4212397`, ไม่มี runner/CD command เดิม
+- แก้ CI และ push `4c877c0`: lint ผ่าน, backend suites และ Docker builds ทุกส่วนผ่าน CI จริง; frontend ยังล้มเพราะ auction test fixture หมดอายุ 30 ตุลาคม
+- ตรึงเวลาใน auction test suite แทนแก้ business logic; local suite ผ่าน 9 tests
+- ตั้ง GitHub Environment `production`: required reviewer `wisit23`, จำกัด branch main
+- local checks: audience/campaign 14 tests, frontend checkout/campaign 46 tests, deployment helpers 35 tests ผ่าน; lint ผ่านก่อนเพิ่ม pull service
+- พบ public WebSocket ส่งกลับ HTTP 400 จาก nginx ภายนอก `192.168.100.225`; gateway บน VM ส่งกลับ HTTP 101 สำเร็จ หน้า init.d ไม่มีตัวเลือกแก้ proxy
+- ขั้นต่อไป: ตรวจ/ส่ง pull workflow และ service, ให้ CI/release ผ่าน, ตั้ง registry access, ติดตั้งบน VM และตรวจคำขอจริง
+- ยังไม่ถือว่า production CD ตรวจรับแล้ว; รอข้อสรุปว่าจะคง WebSocket gate หรือยอมรับ polling ที่ทำงานอยู่เดิม และยังต้องตรวจผล deploy จริง
+
 วันที่: 2026-10-27
 
 ## ข้อตกลงและสถานะ

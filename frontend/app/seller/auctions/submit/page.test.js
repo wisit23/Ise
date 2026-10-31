@@ -95,6 +95,8 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
   };
 
   beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "performance"] });
+    jest.setSystemTime(new Date("2026-10-15T12:00:00.000Z"));
     jest.clearAllMocks();
     useRouter.mockReturnValue({ push: mockPush });
     useSearchParams.mockReturnValue(new URLSearchParams("roundId=round-shoes"));
@@ -110,6 +112,10 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
       }
       return Promise.resolve({});
     });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("shows error and does not render form when roundId query param is missing", async () => {

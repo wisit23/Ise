@@ -38,14 +38,12 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
 4. **Network:** runner/VM ต้องออก HTTPS 443 ไป GitHub Actions, artifact storage และ
    GHCR ได้ ไม่ต้องเปิด inbound SSH จาก GitHub หรือเปิด K3s API สู่ภายนอก
 5. **Audit:** release ใช้ `npm audit --omit=dev --audit-level=high` เป็น blocking gate
-   ผลตรวจวันที่ 2026-10-27 พบ 7 high, 2 critical, 3 moderate ใน dependency tree ปัจจุบัน
-   จึงต้องแก้ advisory ที่กระทบก่อน release แรก ไม่มีการใช้ `--force` หรือข้าม gate
-6. **Runner isolation:** Ise เป็น public repository อย่าติดตั้ง public-repo runner ที่
-   รับ arbitrary PR workflows ลงบน production โดยตรง ต้องมี policy จำกัดให้ trusted
-   deploy workflow ใช้ runner เท่านั้น เช่น runner group ที่รองรับ selected-workflow
-   access ขององค์กร หรือช่องทาง deploy แยกที่ผู้ดูแลออกแบบและตรวจแล้ว ถ้าบัญชีปัจจุบัน
-   จำกัด workflow access ไม่ได้ ยังไม่ควร register production runner ด้วย labels เหล่านี้
-   การตั้ง labels อย่างเดียวไม่ได้เป็น access control
+   ไม่ใช้ `--force` หรือข้าม gate ผลจริงต้องอ่านจาก release run ของ revision นั้น
+6. **Deployment boundary:** ไม่มี Actions runner บน production งาน build และอนุมัติ
+   อยู่บน GitHub-hosted runners ทั้งหมด VM ใช้ root-owned `pull_requests.py` ดึงเฉพาะ
+   public GitHub Release ที่ชื่อ `production-request-<run-id>-<attempt>` ตรวจ successful
+   main deploy workflow, release workflow, push CI, checksum และ manifest ก่อนเรียก
+   `ise-deploy` ไม่รับ shell command หรือรันโค้ดจาก workflow บน VM
 
 เอกสาร GitHub ระบุว่า self-hosted runner ติดต่อออกไป GitHub เพื่อรับงานผ่าน HTTPS
 และเตือนเรื่อง untrusted workflow บน self-hosted runners:
@@ -61,13 +59,13 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
 - ตั้ง registry packages `ghcr.io/wisit23/ise-<component>` ให้ workflow มีสิทธิ์ publish
   และรักษา image digests ของ release ที่ใช้งาน/ย้อนรุ่น ห้ามลบ image ที่ยังต้องใช้
 - Release workflow ใช้ `GITHUB_TOKEN` ที่มี `packages: write` เฉพาะ job publish
-- deploy runner ไม่ใช่ root ไม่อยู่ docker group และไม่มี admin kubeconfig หรือสิทธิ์อ่าน
-  `.env`/backups มีสิทธิ์ sudo เฉพาะ installed `ise-deploy` command
-- labels ที่ deploy job ใช้: `self-hosted`, `linux`, `x64`, `ise-deploy`, `ise-production`
+- deploy job ใช้ GitHub-hosted runner และ publish request หลัง production approval
+- VM อ่าน request สาธารณะโดยไม่ต้องเก็บ GitHub token ส่วน GHCR images ต้อง public
+  หรือ provision read-only registry pull Secret แยกต่างหาก
 - ไม่ใช้ `STAGING_ENABLED` แล้ว งาน release ไม่เริ่ม deploy อัตโนมัติ
 
-การ register runner ต้องใช้ registration token ผ่านช่องทาง secrets ที่ผู้ดูแลอนุมัติ
-ห้ามใส่ token ลง Git หรือส่งลง chat ไม่มี token อยู่ใน repository นี้
+request และ manifest เป็นข้อมูลสาธารณะ มีเฉพาะ commit/digests/mode/provenance
+ห้ามแนบ resolved configuration, credentials หรือ deployment logs ลง release assets
 
 ## ติดตั้ง command บน VM (ยังไม่ได้ดำเนินการ)
 
@@ -77,6 +75,7 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
 ```bash
 sudo install -d -m 755 /opt/ise-cicd/cicd /opt/ise-cicd/production-cloud
 sudo install -o root -g root -m 644 deploy/cicd/{entrypoint,deploy_release,release,smoke,monitor_entrypoint}.py /opt/ise-cicd/cicd/
+sudo install -o root -g root -m 644 deploy/cicd/{pull_requests,pull_entrypoint}.py /opt/ise-cicd/cicd/
 sudo install -o root -g root -m 644 deploy/production-cloud/k8s-production.py /opt/ise-cicd/production-cloud/
 sudo install -o root -g root -m 755 deploy/cicd/ise-deploy /usr/local/sbin/ise-deploy
 sudo install -o root -g root -m 644 deploy/cicd/server.example.json /etc/ise-cicd.json
@@ -107,26 +106,36 @@ checkout เดิมโดยไม่ตรวจงานและผู้�
 
 ถ้า GHCR เป็น private ให้สร้าง registry pull Secret ใน namespace ของ VM นั้นผ่าน
 ช่องทางจัดการ secrets ของผู้ดูแล ห้ามใส่ credential ใน command history หรือ log
-เพิ่ม sudoers ผ่าน `visudo` สำหรับ dedicated runner user เท่านั้น เช่น:
-
-```sudoers
-ise-runner ALL=(root) NOPASSWD: /usr/local/sbin/ise-deploy
-```
-
-command นี้ถือเป็น deployment privilege runner ต้องอยู่ใน trusted workflow boundary
-ไม่ใช่ sandbox สำหรับ untrusted code wrapper ปฏิเสธ environment/mode ที่ไม่ตรง config
-รับ JSON ผ่าน stdin และไม่รับ shell command จาก input
+ไม่ต้องสร้าง runner user หรือ sudoers rule เพิ่ม timer เรียก protected installed command
+โดยตรง config และ command ต้อง root-owned และเขียนได้เฉพาะ root
 
 ## ใช้งานและตรวจผล
 
 1. merge main ที่ CI ผ่าน release workflow จะ audit และสร้าง image ทั้ง 7 ส่วน
 2. เมื่อ release workflow สำเร็จ เปิด artifact `release` ตรวจ commit/digests และ run URL
 3. รัน **Deploy release** จาก main ระบุ `release_run_id`, mode `promote`, migrate=false
-4. ตรวจ release ที่เลือกแล้วอนุมัติ GitHub Environment `production` งานจะไม่ rebuild
-   และไม่ `git pull` ไป main ล่าสุดบน VM
+4. ตรวจ release ที่เลือกแล้วอนุมัติ GitHub Environment `production` workflow เผยแพร่
+   request เป็น public release จากนั้น VM ตรวจทุกสองนาที งานจะไม่ rebuild
+   และไม่เปลี่ยน live checkout ไป main ล่าสุดระหว่าง deploy
 5. helper ตรวจ disk ก่อน pull และตรวจซ้ำหลังแต่ละ image ก่อนหยุด/แทนที่แอปเดิม
-6. GitHub job summary แสดง environment/result/release run; diagnostics รายละเอียดอยู่
-   private `run.log`, `previous-journal.json`, `release.json` และ journal บน VM
+6. GitHub job summary แสดงผล **เผยแพร่คำขอ** ซึ่งไม่ใช่ผล deploy จริง ตรวจผลจริงด้วย
+   `systemctl status ise-pull.service`, `journalctl -u ise-pull.service` และ
+   `/var/lib/reloop-deploy-k8s/pull-request.json` รวมทั้ง private deployment journal
+7. ตัวรับบันทึก request ก่อนเริ่ม deploy หากล้มเหลวหรือถูกตัดการเชื่อมต่อจะไม่ลองซ้ำเอง
+   ให้ตรวจ recovery journal แล้วสร้าง request ใหม่ที่ผ่าน approval อีกครั้ง
+
+หลัง config/routing/registry พร้อม ติดตั้งและเปิดตัวรับ:
+
+```bash
+sudo install -o root -g root -m 644 deploy/cicd/ise-pull.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ise-pull.timer
+sudo systemctl start ise-pull.service
+sudo journalctl -u ise-pull.service --no-pager -n 30
+```
+
+timer ใช้ public GitHub API แบบไม่เก็บ token ปกติใช้ประมาณ 30 requests/hour เมื่อไม่มี
+งานใหม่ หาก GitHub rate-limit หรือ network ล้มเหลวจะไม่ deploy และรอตรวจรอบถัดไป
 
 Public smoke เป็น read-only ไม่ได้พิสูจน์ flow register/order/chat ของผู้ใช้ครบทั้งหมด
 ควรทดสอบ flow เหล่านี้บนเครื่อง local/ระบบชั่วคราวที่แยกข้อมูลก่อนปล่อยจริง

@@ -1,0 +1,11 @@
+[Unit]
+Description=Pull approved Ise production deployment requests
+After=network-online.target k3s.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 -I /opt/ise-cicd/cicd/pull_entrypoint.py
+TimeoutStartSec=3700
