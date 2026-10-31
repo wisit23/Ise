@@ -37,8 +37,13 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
    ก่อนเปิดใช้ helper จะบล็อก platform ที่ไม่ตรง ยังไม่ได้ยืนยัน architecture สด
 4. **Network:** runner/VM ต้องออก HTTPS 443 ไป GitHub Actions, artifact storage และ
    GHCR ได้ ไม่ต้องเปิด inbound SSH จาก GitHub หรือเปิด K3s API สู่ภายนอก
-5. **Audit:** release ใช้ `npm audit --omit=dev --audit-level=high` เป็น blocking gate
-   ไม่ใช้ `--force` หรือข้าม gate ผลจริงต้องอ่านจาก release run ของ revision นั้น
+5. **Audit:** CI และ release ใช้ `scripts/ci/release-audit.cjs` ตรวจ production dependencies
+   และบล็อก high/critical ตัวตรวจใช้ npm audit JSON ไม่ใช้ `--force` หรือข้าม audit errors
+   VM CPU ต้องใช้ Sharp 0.34.5 ทั้ง frontend/product; pin ผ่าน root override และ lockfile
+   policy ที่เสนออยู่ใน `scripts/ci/release-audit-policy.json` และยังปิดข้อยกเว้นไว้
+   จนผู้ใช้อนุมัติ ข้อยกเว้นรับได้เฉพาะ 3 advisory ที่ระบุบน Sharp 0.34.5 และผลกระทบ
+   ทาง dependency ที่มาจาก Sharp เท่านั้น direct advisory อื่นหรือ critical ยังบล็อก
+   การยอมรับข้อยกเว้นไม่ใช่การแก้ช่องโหว่ ต้องถอนหลังมี patched runtime ที่รองรับ CPU
 6. **Deployment boundary:** ไม่มี Actions runner บน production งาน build และอนุมัติ
    อยู่บน GitHub-hosted runners ทั้งหมด VM ใช้ root-owned `pull_requests.py` ดึงเฉพาะ
    public GitHub Release ที่ชื่อ `production-request-<run-id>-<attempt>` ตรวจ successful

@@ -11,8 +11,19 @@
 - ตั้ง GitHub Environment `production`: required reviewer `wisit23`, จำกัด branch main
 - local checks: audience/campaign 14 tests, frontend checkout/campaign 46 tests, deployment helpers 35 tests ผ่าน; lint ผ่านก่อนเพิ่ม pull service
 - พบ public WebSocket ส่งกลับ HTTP 400 จาก nginx ภายนอก `192.168.100.225`; gateway บน VM ส่งกลับ HTTP 101 สำเร็จ หน้า init.d ไม่มีตัวเลือกแก้ proxy
-- ขั้นต่อไป: ตรวจ/ส่ง pull workflow และ service, ให้ CI/release ผ่าน, ตั้ง registry access, ติดตั้งบน VM และตรวจคำขอจริง
-- ยังไม่ถือว่า production CD ตรวจรับแล้ว; รอข้อสรุปว่าจะคง WebSocket gate หรือยอมรับ polling ที่ทำงานอยู่เดิม และยังต้องตรวจผล deploy จริง
+- ส่ง pull workflow/service `110a096` และเพิ่มการตรวจ immutable Actions artifact ใน `6d9d065`; actionlint ผ่าน และ helper tests ผ่าน 37 ข้อ
+- แก้ release audit ใน `28fd2e3`: product-service ใช้ Sharp 0.35.5 แทน nested 0.34.5; tests ภาพ/upload ผ่าน 27 ข้อกับรุ่นใหม่จริง และ production audit รายงาน 0 vulnerabilities
+- [CI ของ 28fd2e3](https://github.com/wisit23/Ise/actions/runs/41231251714) ผ่านครบ; [Release images](https://github.com/wisit23/Ise/actions/runs/41231439304) กำลังรัน ณ บันทึกนี้
+- ตรวจ transport กับ GitHub artifact จริง ID `13053796460`: ZIP 122426 bytes มี SHA-256 ตรงกับ GitHub metadata ยืนยันว่าตัวรับสามารถเทียบ archive กับ immutable artifact digest ได้
+- ยืนยันติดตั้ง base root-owned wrapper ที่ `/usr/local/sbin/ise-deploy` และ `/opt/ise-cicd`, config `/etc/ise-cicd.json` ยัง disabled; ยังยืนยันการติดตั้ง pull timer บน VM ไม่ได้
+- SSH session ถูกปิดและหน้า Connect ไม่มี guest credential เดิมแล้ว; รอเชื่อมต่อใหม่ผ่านช่องส่วนตัว ไม่มีการบันทึกรหัสผ่านลง repository
+- ขั้นต่อไป: ให้ release สร้าง image สำเร็จ, ตรวจ registry access/visibility, ติดตั้ง pull service/timer บน VM และตรวจคำขอจริง
+- ยังไม่ถือว่า production CD ตรวจรับแล้ว; ยังไม่ได้รับข้อสรุปว่าจะคง WebSocket gate หรือยอมรับ polling ที่ทำงานอยู่เดิม และยังต้องตรวจผล deploy จริง
+- ผู้ใช้ยืนยันเพิ่มเติมว่า VM CPU ไม่รองรับ Sharp 0.35.5 และต้องคง 0.34.5; ยกเลิกการใช้ release ของ `28fd2e3` แม้ CI/build ผ่าน ไม่มีคำขอ deploy release นี้
+- คืน package.json และ lockfile เป็น `~0.34.5` ตาม constraint; ผลทดสอบบน Windows/GitHub ไม่ใช่หลักฐาน CPU compatibility ของ VM
+- release audit ของ 0.34.5 มี 3 advisory ที่ทราบอยู่ ต้องตกลงข้อยกเว้นเฉพาะรายการก่อนเปิด release gate โดยไม่ข้าม findings อื่น
+- ผู้ใช้กำหนดใหม่ให้แก้ใน branch `staging` ก่อน และนำเข้า main เมื่อผ่าน checks ครบเท่านั้น; ไม่มีการแก้ main เพิ่มหลังคำสั่งนี้
+- root override pin Sharp `~0.34.5` ทั้ง frontend/product; npm ci dry-run ผ่าน ตัวตรวจ audit และ policy exception ที่ยัง disabled เตรียมไว้บน staging
 
 วันที่: 2026-10-27
 

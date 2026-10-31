@@ -1,0 +1,12 @@
+{
+  "sharp0345": {
+    "enabled": false,
+    "version": "0.34.5",
+    "reason": "Production VM CPU cannot run Sharp 0.35.x. User requires 0.34.5. Remove this exception after a patched CPU-compatible runtime is verified.",
+    "advisories": [
+      "https://github.com/advisories/GHSA-f88m-g3jw-g9cj",
+      "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c",
+      "https://github.com/advisories/GHSA-wq5f-xc86-pv6w"
+    ]
+  }
+}

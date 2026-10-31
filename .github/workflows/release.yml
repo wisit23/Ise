@@ -30,8 +30,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # CI's historical advisory exception must not silently authorize a release.
-      - run: npm audit --omit=dev --audit-level=high
+      # Same scoped policy as CI; unapproved or new findings still block release.
+      - run: node scripts/ci/release-audit.cjs
 
   images:
     needs: audit
