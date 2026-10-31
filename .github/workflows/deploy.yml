@@ -100,7 +100,7 @@ jobs:
         with:
           name: deployment-input
           path: release-input
-      - name: Publish approved deployment request
+      - name: Assemble approved deployment request
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -118,10 +118,29 @@ jobs:
             'release_run_id': int(os.environ['RELEASE_RUN']),
             'mode': os.environ['MODE'], 'migrate': os.environ['MIGRATION'] == 'migrate',
             'manifest_sha256': hashlib.sha256(manifest).hexdigest()}
-          Path('request.json').write_text(json.dumps(request) + '\n')
+          Path('release-input/request.json').write_text(json.dumps(request) + '\n')
           PY
+      - name: Record immutable approved request
+        id: approved
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-production-request-${{ github.run_attempt }}
+          path: |
+            release-input/request.json
+            release-input/release.json
+          retention-days: 90
+          compression-level: 0
+      - name: Publish verified artifact transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ARTIFACT_ID: ${{ steps.approved.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.approved.outputs.artifact-digest }}
+        run: |
+          gh api "repos/$GH_REPO/actions/artifacts/$ARTIFACT_ID/zip" > deployment-input.zip
+          printf '%s  deployment-input.zip\n' "$ARTIFACT_DIGEST" | sha256sum --check
           tag="production-request-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" request.json release-input/release.json \
+          gh release create "$tag" deployment-input.zip \
             --target "$GITHUB_SHA" --title "Approved production request $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT" \
             --notes "Approved deployment request. Actual deployment status is recorded in the VM journal, not this workflow result." \
             --latest=false

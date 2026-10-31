@@ -1,8 +1,10 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import pull_requests as pull
@@ -19,23 +21,33 @@ class PullRequestTests(unittest.TestCase):
                         'manifest_sha256': hashlib.sha256(self.raw).hexdigest()}
         tag = 'production-request-30-1'
         self.item = {'tag_name': tag, 'draft': False, 'prerelease': False, 'assets': [
-            {'name': name, 'size': 1000, 'browser_download_url': f'https://github.com/wisit23/Ise/releases/download/{tag}/{name}'}
-            for name in ('request.json', 'release.json')]}
+            {'name': 'deployment-input.zip', 'size': 1000,
+             'browser_download_url': f'https://github.com/wisit23/Ise/releases/download/{tag}/deployment-input.zip'}]}
+
+    def archive(self):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, 'w') as archive:
+            archive.writestr('request.json', json.dumps(self.request))
+            archive.writestr('release.json', self.raw)
+        return output.getvalue()
 
     def workflow(self, path, event):
         return {'path': path, 'event': event, 'head_branch': 'main', 'status': 'completed',
                 'conclusion': 'success', 'repository': {'full_name': 'wisit23/Ise'},
                 'head_repository': {'full_name': 'wisit23/Ise'}}
 
-    def responses(self):
+    def responses(self, archive):
         ci = self.workflow('.github/workflows/ci.yml', 'push')
         ci['head_sha'] = self.release['commit']
         return [self.workflow('.github/workflows/deploy.yml', 'workflow_dispatch'),
+                {'artifacts': [{'name': 'approved-production-request-1', 'expired': False,
+                                'workflow_run': {'id': 30}, 'digest': 'sha256:' + hashlib.sha256(archive).hexdigest()}]},
                 self.workflow('.github/workflows/release.yml', 'workflow_run'), {'workflow_runs': [ci]}]
 
     def validate(self):
-        with patch.object(pull, 'read_url', side_effect=[json.dumps(self.request).encode(), self.raw]), \
-                patch.object(pull, 'api', side_effect=self.responses()):
+        archive = self.archive()
+        with patch.object(pull, 'read_url', return_value=archive), \
+                patch.object(pull, 'api', side_effect=self.responses(archive)):
             return pull.validate_request(self.item)
 
     def test_approved_request_checks_workflows_checksum_and_manifest(self):
@@ -64,15 +76,31 @@ class PullRequestTests(unittest.TestCase):
         self.item['assets'][0]['browser_download_url'] = 'https://attacker.test/request.json'
         with self.assertRaisesRegex(ValueError, 'asset'):
             self.validate()
-        self.item['assets'] = [self.item['assets'][1]] * 2
+        self.item['assets'] = [self.item['assets'][0]] * 2
         with self.assertRaisesRegex(ValueError, 'assets'):
             self.validate()
 
     def test_missing_successful_push_ci_is_rejected(self):
-        responses = self.responses()
+        archive = self.archive()
+        responses = self.responses(archive)
         responses[-1] = {'workflow_runs': []}
-        with patch.object(pull, 'read_url', side_effect=[json.dumps(self.request).encode(), self.raw]), \
+        with patch.object(pull, 'read_url', return_value=archive), \
                 patch.object(pull, 'api', side_effect=responses), self.assertRaisesRegex(ValueError, 'push CI'):
+            pull.validate_request(self.item)
+
+    def test_mutable_release_asset_cannot_replace_the_approved_artifact(self):
+        archive = self.archive()
+        responses = self.responses(archive)
+        self.request['mode'] = 'rollback'
+        with patch.object(pull, 'read_url', return_value=self.archive()), \
+                patch.object(pull, 'api', side_effect=responses), self.assertRaisesRegex(ValueError, 'Immutable'):
+            pull.validate_request(self.item)
+
+    def test_artifact_from_another_run_is_rejected(self):
+        archive = self.archive()
+        responses = self.responses(archive)
+        responses[1]['artifacts'][0]['workflow_run']['id'] = 31
+        with patch.object(pull, 'api', side_effect=responses), self.assertRaisesRegex(ValueError, 'another workflow'):
             pull.validate_request(self.item)
 
     def test_successful_request_is_not_deployed_twice(self):

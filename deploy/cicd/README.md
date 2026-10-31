@@ -42,7 +42,8 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
 6. **Deployment boundary:** ไม่มี Actions runner บน production งาน build และอนุมัติ
    อยู่บน GitHub-hosted runners ทั้งหมด VM ใช้ root-owned `pull_requests.py` ดึงเฉพาะ
    public GitHub Release ที่ชื่อ `production-request-<run-id>-<attempt>` ตรวจ successful
-   main deploy workflow, release workflow, push CI, checksum และ manifest ก่อนเรียก
+   main deploy workflow, release workflow, push CI, immutable Actions artifact digest
+   และ manifest ก่อนเรียก
    `ise-deploy` ไม่รับ shell command หรือรันโค้ดจาก workflow บน VM
 
 เอกสาร GitHub ระบุว่า self-hosted runner ติดต่อออกไป GitHub เพื่อรับงานผ่าน HTTPS
@@ -64,8 +65,10 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
   หรือ provision read-only registry pull Secret แยกต่างหาก
 - ไม่ใช้ `STAGING_ENABLED` แล้ว งาน release ไม่เริ่ม deploy อัตโนมัติ
 
-request และ manifest เป็นข้อมูลสาธารณะ มีเฉพาะ commit/digests/mode/provenance
+request และ manifest อยู่ใน `deployment-input.zip` เป็นข้อมูลสาธารณะ มีเฉพาะ commit/digests/mode/provenance
 ห้ามแนบ resolved configuration, credentials หรือ deployment logs ลง release assets
+VM ตรวจ archive กับ SHA-256 ของ immutable Actions artifact ใน run/attempt ที่อนุมัติ
+ก่อนอ่านไฟล์ภายใน การแก้ release asset ภายหลังจึงไม่เปลี่ยนคำขอที่อนุมัติแล้ว
 
 ## ติดตั้ง command บน VM (ยังไม่ได้ดำเนินการ)
 

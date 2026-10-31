@@ -1,11 +1,13 @@
 """Consume approved public deployment requests without an Actions runner or token."""
 import argparse
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -46,13 +48,26 @@ def validate_request(item):
     match = TAG.fullmatch(tag)
     contract.require(match is not None and not item.get("draft") and not item.get("prerelease"), "Invalid deployment request release")
     run_id, attempt = map(int, match.groups())
+    deployment = api(f"/actions/runs/{run_id}/attempts/{attempt}")
+    check_run(deployment, ".github/workflows/deploy.yml", "workflow_dispatch")
+    artifacts = api(f"/actions/runs/{run_id}/artifacts?per_page=100").get("artifacts", [])
+    artifacts = [a for a in artifacts if a.get("name") == f"approved-production-request-{attempt}" and not a.get("expired")]
+    contract.require(len(artifacts) == 1, "Approved immutable request artifact is missing or duplicated")
+    artifact = artifacts[0]
+    contract.require(artifact.get("workflow_run", {}).get("id") == run_id, "Artifact is from another workflow run")
     assets = item.get("assets", [])
-    contract.require(len(assets) == 2 and {a["name"] for a in assets} == {"request.json", "release.json"}, "Request assets are incomplete or duplicated")
-    content = {}
-    for asset in assets:
-        expected = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{asset['name']}"
-        contract.require(asset.get("browser_download_url") == expected and asset.get("size", 0) <= 32768, "Unexpected deployment asset")
-        content[asset["name"]] = read_url(expected)
+    contract.require(len(assets) == 1 and assets[0].get("name") == "deployment-input.zip", "Request assets are incomplete or duplicated")
+    expected = f"https://github.com/{REPOSITORY}/releases/download/{tag}/deployment-input.zip"
+    contract.require(assets[0].get("browser_download_url") == expected and assets[0].get("size", 0) <= 131072, "Unexpected deployment asset")
+    archive = read_url(expected, 131072)
+    # Release assets are mutable. Trust only the digest of the immutable Actions
+    # artifact from this exact approved run/attempt, obtained directly from GitHub.
+    contract.require(artifact.get("digest") == "sha256:" + hashlib.sha256(archive).hexdigest(), "Immutable Actions artifact checksum mismatch")
+    with zipfile.ZipFile(io.BytesIO(archive)) as zipped:
+        entries = zipped.infolist()
+        contract.require(len(entries) == 2 and {e.filename for e in entries} == {"request.json", "release.json"}
+                         and all(e.file_size <= 32768 for e in entries), "Invalid request archive contents")
+        content = {e.filename: zipped.read(e) for e in entries}
     request = json.loads(content["request.json"])
     manifest = contract.validate(json.loads(content["release.json"]))
     contract.require(request.get("version") == 1 and request.get("environment") == "production"
@@ -63,8 +78,6 @@ def validate_request(item):
     contract.require(hashlib.sha256(content["release.json"]).hexdigest() == request.get("manifest_sha256"), "Release asset checksum mismatch")
     selected = request.get("release_run_id")
     contract.require(type(selected) is int and selected > 0, "Invalid selected release run")
-    deployment = api(f"/actions/runs/{run_id}/attempts/{attempt}")
-    check_run(deployment, ".github/workflows/deploy.yml", "workflow_dispatch")
     release_run = api(f"/actions/runs/{selected}")
     check_run(release_run, ".github/workflows/release.yml", "workflow_run")
     contract.require(manifest["run_url"] == f"https://github.com/{REPOSITORY}/actions/runs/{selected}", "Manifest provenance does not match selected release")
