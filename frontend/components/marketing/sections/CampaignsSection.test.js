@@ -29,7 +29,7 @@ describe("Campaign date formatting", () => {
 });
 
 describe("Campaign audience score formatting", () => {
-  test("clamps legacy score ranges to the current maximum of 33", () => {
+  test("clamps legacy score ranges to the current maximum of 30", () => {
     expect(
       formatAudienceSummary({
         category: "รองเท้า",
@@ -37,7 +37,7 @@ describe("Campaign audience score formatting", () => {
         minScore: 7,
         maxScore: 38,
       }),
-    ).toBe("หมวดหมู่: รองเท้า · แบรนด์: nike · คะแนน 7–33");
+    ).toBe("หมวดหมู่: รองเท้า · แบรนด์: nike · คะแนน 7–30");
   });
 });
 
@@ -799,13 +799,13 @@ describe("CampaignsSection (Marketing Workspace)", () => {
       averageScore: 10,
       medianScore: 9,
       maximumPossible: 28,
-      globalMaximum: 33,
+      globalMaximum: 30,
       distribution: [
         { key: "none", min: 0, max: 0, count: 2 },
         { key: "emerging", min: 1, max: 6, count: 1 },
         { key: "moderate", min: 7, max: 14, count: 2 },
         { key: "high", min: 15, max: 24, count: 1 },
-        { key: "very_high", min: 25, max: 33, count: 0 },
+        { key: "very_high", min: 25, max: 30, count: 0 },
       ],
     };
     apiFetch.mockImplementation((url) => {
@@ -820,7 +820,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
             styles: [],
             sizesByCategory: {},
           },
-          globalMaximum: 33,
+          globalMaximum: 30,
         });
       }
       if (typeof url === "string" && url.includes("/audience/preview")) {
@@ -836,7 +836,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     fireEvent.click(screen.getByLabelText("ตามคะแนนความสนใจ"));
 
     expect(screen.queryByLabelText("ไซซ์")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("คะแนนสิ้นสุด")).toHaveAttribute("max", "33");
+    expect(screen.getByLabelText("คะแนนสิ้นสุด")).toHaveAttribute("max", "30");
 
     expect(screen.getByText(/ยังไม่ได้คำนวณ/)).toBeInTheDocument();
     expect(screen.getByText("ได้สิทธิ์")).toBeInTheDocument();

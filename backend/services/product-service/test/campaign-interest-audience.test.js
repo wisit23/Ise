@@ -20,7 +20,7 @@ const approvedCampaign = {
   audienceCriteria: {
     brand: "nike",
     minScore: 15,
-    maxScore: 33,
+    maxScore: 30,
     from: "2026-10-01T00:00:00.000Z",
     to: "2026-10-18T00:00:00.000Z",
   },

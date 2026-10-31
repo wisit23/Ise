@@ -50,7 +50,7 @@ test("audience preview reports the agreed bands and only returns aggregate data"
     {
       brand: "Nike",
       minScore: 15,
-      maxScore: 33,
+      maxScore: 30,
       from: "2026-10-01T00:00:00.000Z",
       to: now.toISOString(),
     },
@@ -60,13 +60,13 @@ test("audience preview reports the agreed bands and only returns aggregate data"
   assert.equal(result.totalCustomers, 3);
   assert.equal(result.interestedCustomers, 2);
   assert.equal(result.eligibleCustomers, 1);
-  assert.equal(result.maximumObserved, 26);
-  assert.equal(result.averageScore, 16);
-  assert.equal(result.maximumPossible, 26);
-  assert.equal(result.globalMaximum, 33);
+  assert.equal(result.maximumObserved, 23);
+  assert.equal(result.averageScore, 13);
+  assert.equal(result.maximumPossible, 23);
+  assert.equal(result.globalMaximum, 30);
   assert.deepEqual(
     result.distribution.map(({ min, max, count }) => [min, max, count]),
-    [[0, 0, 1], [1, 6, 1], [7, 14, 0], [15, 24, 0], [25, 33, 1]],
+    [[0, 0, 1], [1, 6, 1], [7, 14, 0], [15, 24, 1], [25, 30, 0]],
   );
   assert.equal(Object.hasOwn(result, "eligible"), false);
   assert.equal(JSON.stringify(result).includes("buyer-a"), false);
@@ -78,14 +78,14 @@ test("audience snapshot freezes only users inside the selected score range", asy
     {
       brand: "Nike",
       minScore: 15,
-      maxScore: 33,
+      maxScore: 30,
       from: "2026-10-01T00:00:00.000Z",
       to: now.toISOString(),
     },
     dependencies(now),
   );
 
-  assert.deepEqual(result.members, [{ userId: "buyer-a", score: 26 }]);
+  assert.deepEqual(result.members, [{ userId: "buyer-a", score: 23 }]);
   assert.equal(result.eligibleCustomers, 1);
 });
 
@@ -107,7 +107,7 @@ test("audience options expose only marketing interest dimensions", async () => {
     brands: ["Nike"],
     styles: ["Running"],
   });
-  assert.equal(result.globalMaximum, 33);
+  assert.equal(result.globalMaximum, 30);
 });
 
 test("unfiltered trend aggregates every behavior dimension and reports source coverage", async () => {

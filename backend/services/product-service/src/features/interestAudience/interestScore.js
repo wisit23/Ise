@@ -28,7 +28,7 @@ const INTEREST_SCORE_BANDS = Object.freeze([
   { key: "emerging", label: "เริ่มสนใจ", min: 1, max: 6 },
   { key: "moderate", label: "สนใจปานกลาง", min: 7, max: 14 },
   { key: "high", label: "สนใจสูง", min: 15, max: 24 },
-  { key: "very_high", label: "สนใจสูงมาก", min: 25, max: 33 },
+  { key: "very_high", label: "สนใจสูงมาก", min: 25, max: 30 },
 ]);
 
 const SIMILARITY_WEIGHTS = Object.freeze({

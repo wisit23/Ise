@@ -901,11 +901,11 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
       assert.equal(rejectItemAudit.newState.status, "rejected");
       createdAuditLogIds.push(rejectItemAudit.id);
 
-      // Verify product status reverted to available
+      // Rejection requires the seller to choose how to offer the product again.
       const product2AfterReject = await prisma.product.findUnique({
         where: { id: testProduct2.id },
       });
-      assert.equal(product2AfterReject.status, "available");
+      assert.equal(product2AfterReject.status, "auction_action_required");
     },
   );
 

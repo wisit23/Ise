@@ -2,7 +2,7 @@
 
 import { formatReferenceCode } from "../../lib/referenceCodes";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";

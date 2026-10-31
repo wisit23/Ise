@@ -3,6 +3,7 @@ const repository = require("./interestAudienceRepository");
 const authClient = require("./authAudienceClient");
 const orderClient = require("./orderAudienceClient");
 const { recencyWeight } = require("../recommendations/behaviorRepository");
+const { weightFor } = require("../recommendations/recommendationRules");
 const {
   INTEREST_SCORE_BANDS,
   INTEREST_SCORE_MAX,
@@ -105,17 +106,17 @@ async function loadDataset({ from, to }, dependencies = {}) {
     behavior: {
       searches: (searchesByUser.get(userId) || []).map((row) => ({
         query: row.query,
-        weight: recencyWeight(row.searchedAt, 6, referenceTime),
+        weight: recencyWeight(row.searchedAt, weightFor("search"), referenceTime),
         occurredAt: row.searchedAt,
       })),
       likes: (likesByUser.get(userId) || []).map((row) => ({
         profile: row.profile,
-        weight: recencyWeight(row.occurredAt, 8, referenceTime),
+        weight: recencyWeight(row.occurredAt, weightFor("like"), referenceTime),
         occurredAt: row.occurredAt,
       })),
       purchases: (purchasesByUser.get(userId) || []).map((row) => ({
         profile: row.profile,
-        weight: recencyWeight(row.occurredAt, 10, referenceTime),
+        weight: recencyWeight(row.occurredAt, weightFor("purchase"), referenceTime),
         occurredAt: row.occurredAt,
       })),
     },

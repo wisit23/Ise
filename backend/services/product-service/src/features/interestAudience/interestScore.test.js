@@ -9,10 +9,10 @@ const {
 } = require("./interestScore");
 
 test("defines the agreed score bands and global maximum", () => {
-  assert.equal(INTEREST_SCORE_MAX, 33);
+  assert.equal(INTEREST_SCORE_MAX, 30);
   assert.deepEqual(
     INTEREST_SCORE_BANDS.map(({ min, max }) => [min, max]),
-    [[0, 0], [1, 6], [7, 14], [15, 24], [25, 33]],
+    [[0, 0], [1, 6], [7, 14], [15, 24], [25, 30]],
   );
   assert.equal(bandForScore(0).key, "none");
   assert.equal(bandForScore(6.5).key, "moderate");
@@ -35,7 +35,7 @@ test("scores profile and strongest behavior signals without accumulating repeats
     behavior: {
       searches: [
         { query: "nike", weight: 3 },
-        { query: "nike running", weight: 6 },
+        { query: "nike running", weight: 3 },
       ],
       likes: [
         {
@@ -59,10 +59,10 @@ test("scores profile and strongest behavior signals without accumulating repeats
       ],
     },
   });
-  assert.equal(result.score, 33);
+  assert.equal(result.score, 30);
   assert.deepEqual(result.sources, {
     profile: 9,
-    search: 6,
+    search: 3,
     like: 8,
     purchase: 10,
   });
@@ -85,7 +85,7 @@ test("normalizes behavioral similarity to the selected campaign dimensions", () 
     },
   });
   assert.equal(result.score, 20);
-  assert.equal(maximumScoreFor({ brand: "Nike" }), 26);
+  assert.equal(maximumScoreFor({ brand: "Nike" }), 23);
 });
 
 test("treats a longer search phrase as interest when it contains a selected target", () => {

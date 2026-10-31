@@ -89,7 +89,7 @@ const SCORE_BAND_PLACEHOLDERS = [
   { key: "emerging", min: 1, max: 6 },
   { key: "moderate", min: 7, max: 14 },
   { key: "high", min: 15, max: 24 },
-  { key: "very_high", min: 25, max: 33 },
+  { key: "very_high", min: 25, max: 30 },
 ];
 
 export function formatThaiDateTime(dateString) {
@@ -141,8 +141,8 @@ export function formatAudienceSummary(criteria) {
   ]
     .filter(([key]) => criteria[key])
     .map(([key, label]) => `${label}: ${criteria[key]}`);
-  const minScore = Math.min(Number(criteria.minScore ?? 1), 33);
-  const maxScore = Math.min(Number(criteria.maxScore ?? 33), 33);
+  const minScore = Math.min(Number(criteria.minScore ?? 1), 30);
+  const maxScore = Math.min(Number(criteria.maxScore ?? 30), 30);
   return `${dimensions.join(" · ")} · คะแนน ${minScore}–${maxScore}`;
 }
 
@@ -261,7 +261,7 @@ export default function CampaignsSection({
   const [audienceBrand, setAudienceBrand] = useState("");
   const [audienceStyle, setAudienceStyle] = useState("");
   const [audienceMinScore, setAudienceMinScore] = useState("15");
-  const [audienceMaxScore, setAudienceMaxScore] = useState("33");
+  const [audienceMaxScore, setAudienceMaxScore] = useState("30");
   const [audienceFrom, setAudienceFrom] = useState("");
   const [audienceTo, setAudienceTo] = useState("");
   const [audiencePreview, setAudiencePreview] = useState(null);
@@ -451,7 +451,7 @@ export default function CampaignsSection({
     setAudienceBrand(normalized(criteria?.brand));
     setAudienceStyle(normalized(criteria?.style));
     setAudienceMinScore(String(criteria?.minScore ?? 15));
-    setAudienceMaxScore(String(Math.min(Number(criteria?.maxScore ?? 33), 33)));
+    setAudienceMaxScore(String(Math.min(Number(criteria?.maxScore ?? 30), 30)));
     setAudienceFrom(
       criteria?.from
         ? toLocalDatetimeInput(criteria.from)
@@ -614,11 +614,11 @@ export default function CampaignsSection({
       !Number.isInteger(criteria.minScore) ||
       !Number.isInteger(criteria.maxScore) ||
       criteria.minScore < 0 ||
-      criteria.maxScore > 33 ||
+      criteria.maxScore > 30 ||
       criteria.minScore > criteria.maxScore
     ) {
       throw new Error(
-        "ช่วงคะแนนต้องอยู่ระหว่าง 0–33 และคะแนนเริ่มต้นต้องไม่มากกว่าคะแนนสิ้นสุด",
+        "ช่วงคะแนนต้องอยู่ระหว่าง 0–30 และคะแนนเริ่มต้นต้องไม่มากกว่าคะแนนสิ้นสุด",
       );
     }
     if (
@@ -983,7 +983,7 @@ export default function CampaignsSection({
       "สูงสุดที่เป็นไปได้",
       audiencePreview
         ? `${audiencePreview.maximumPossible} / ${audiencePreview.globalMaximum}`
-        : `— / ${audienceOptions?.globalMaximum || 33}`,
+        : `— / ${audienceOptions?.globalMaximum || 30}`,
     ],
   ];
   const audienceDistribution =
@@ -1901,7 +1901,7 @@ export default function CampaignsSection({
                     <input
                       type="number"
                       min="0"
-                      max="33"
+                      max="30"
                       step="1"
                       value={audienceMinScore}
                       onChange={(event) => {
@@ -1916,7 +1916,7 @@ export default function CampaignsSection({
                     <input
                       type="number"
                       min="0"
-                      max="33"
+                      max="30"
                       step="1"
                       value={audienceMaxScore}
                       onChange={(event) => {
@@ -1953,7 +1953,7 @@ export default function CampaignsSection({
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-slate-500">
-                    ช่วงคะแนนที่ใช้: 0, 1–6, 7–14, 15–24 และ 25–33
+                    ช่วงคะแนนที่ใช้: 0, 1–6, 7–14, 15–24 และ 25–30
                   </p>
                   <button
                     type="button"
