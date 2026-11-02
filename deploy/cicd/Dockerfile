@@ -1,7 +1,8 @@
 # Build from the repository root. Preserve the existing cloud mount paths.
-FROM node:24-bookworm-slim AS dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Sharp 0.34.5's glibc x64 binary requires x86-64-v2; the production VM
+# supports the musl binary used by its existing Alpine application images.
+FROM node:24-alpine AS dependencies
+RUN apk add --no-cache openssl ca-certificates
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY backend/shared/package.json backend/shared/package.json
@@ -20,8 +21,7 @@ FROM dependencies AS backend
 ARG WORKSPACE=backend/gateway
 ARG RUNTIME_PATH=gateway
 RUN if [ "$WORKSPACE" = backend/services/product-service ]; then \
-      apt-get update && apt-get install -y --no-install-recommends ffmpeg \
-      && rm -rf /var/lib/apt/lists/*; fi
+      apk add --no-cache ffmpeg; fi
 COPY ${WORKSPACE} /app/${RUNTIME_PATH}
 # npm can keep dependencies inside the workspace instead of hoisting them.
 # Retain those modules while preserving the existing runtime/storage paths.
@@ -50,12 +50,13 @@ ARG NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS=300
 ARG NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS=10000
 RUN npm run build
 
-FROM node:24-bookworm-slim AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app/frontend
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=frontend-build /app/node_modules /app/node_modules
 COPY --from=frontend-build /app/frontend /app/frontend
 COPY --from=frontend-build /app/backend/shared /app/backend/shared
+RUN node -e 'require("sharp")({create:{width:1,height:1,channels:3,background:"black"}}).png().toBuffer().catch(e=>{console.error(e.message);process.exit(1)})'
 EXPOSE 3000
 CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0"]
