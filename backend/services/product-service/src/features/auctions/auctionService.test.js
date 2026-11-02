@@ -2226,6 +2226,7 @@ test("placeBid validates non-positive amount with clear Thai message", async () 
 });
 
 test("createRound accepts empty categories array or omitted as all categories", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T12:00:00.000Z") });
   let createdPayload = null;
   t.mock.method(repository, "createRound", async (data) => {
     createdPayload = data;
@@ -2261,6 +2262,7 @@ test("createRound accepts empty categories array or omitted as all categories", 
 });
 
 test("createRound accepts one valid category", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T12:00:00.000Z") });
   let createdPayload = null;
   t.mock.method(repository, "listCategories", async () => [
     { id: "cat-shoes", name: "รองเท้า" },
@@ -2286,6 +2288,7 @@ test("createRound accepts one valid category", async (t) => {
 });
 
 test("createRound accepts multiple valid categories", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T12:00:00.000Z") });
   let createdPayload = null;
   t.mock.method(repository, "listCategories", async () => [
     { id: "cat-shoes", name: "รองเท้า" },

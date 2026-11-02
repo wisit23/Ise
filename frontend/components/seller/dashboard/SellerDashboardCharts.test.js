@@ -2,6 +2,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import SellerDashboardCharts from "./SellerDashboardCharts";
 
 describe("SellerDashboardCharts", () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "performance"] });
+    jest.setSystemTime(new Date("2026-10-18T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   const mockStats = {
     totalRevenue: 5000,
     regularRevenue: 3000,
