@@ -23,7 +23,16 @@ RUN if [ "$WORKSPACE" = backend/services/product-service ]; then \
       apt-get update && apt-get install -y --no-install-recommends ffmpeg \
       && rm -rf /var/lib/apt/lists/*; fi
 COPY ${WORKSPACE} /app/${RUNTIME_PATH}
+# npm can keep dependencies inside the workspace instead of hoisting them.
+# Retain those modules while preserving the existing runtime/storage paths.
+RUN if [ -d "/app/${WORKSPACE}/node_modules" ]; then \
+      ln -s "/app/${WORKSPACE}/node_modules" "/app/${RUNTIME_PATH}/node_modules"; \
+    fi
 WORKDIR /app/${RUNTIME_PATH}
+RUN node -e 'require.resolve("@reloop/shared")' && \
+    if [ "$WORKSPACE" = backend/services/product-service ]; then \
+      node -e 'require("sharp")({create:{width:1,height:1,channels:3,background:"black"}}).png().toBuffer().catch(e=>{console.error(e.message);process.exit(1)})'; \
+    fi
 RUN if [ -f prisma/schema.prisma ]; then npx --no-install prisma generate; fi
 ENV NODE_ENV=production
 # Existing mounts can be root-owned; preserve the cloud image's user in this transition.
