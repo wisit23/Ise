@@ -148,6 +148,7 @@ class ReleaseDeployment(cloud.Deployment):
             self.k("wait", "--for=condition=complete", "job/" + job_name, "--timeout=320s")
             self.k("delete", "job", job_name)
             self.check_disk_space()
+        self.verify_built_images()
 
     def check_disk_space(self, *, pulling=False):
         image_store = Path(self.settings.get("image_store", "/var/lib/rancher/k3s/agent/containerd"))

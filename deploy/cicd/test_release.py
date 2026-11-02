@@ -113,6 +113,7 @@ class DeploymentTests(unittest.TestCase):
         (state / "journal.json").write_text(json.dumps(journal))
         settings = {"root": str(root), "state": str(state), "public_url": "https://site.test", "pull_secret": "ghcr-read"}
         instance = deploy.ReleaseDeployment(settings, value or manifest(), mode, migrate)
+        instance.verify_built_images = MagicMock()
         # Disk behavior is exercised separately with controlled filesystems/capacity.
         instance.check_disk_space = MagicMock()
         return instance
@@ -166,6 +167,17 @@ class DeploymentTests(unittest.TestCase):
             instance.stop_apps = MagicMock()
             with self.assertRaises(deploy.cloud.Blocked):
                 instance.build()
+            instance.stop_apps.assert_not_called()
+
+    def test_native_runtime_failure_blocks_before_live_apps_are_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            instance = self.instance(directory)
+            instance.config = config()
+            instance.k, instance.apply, instance.stop_apps = MagicMock(), MagicMock(), MagicMock()
+            instance.verify_built_images.side_effect = deploy.cloud.Blocked("Unsupported image CPU")
+            with self.assertRaisesRegex(deploy.cloud.Blocked, "Unsupported image CPU"):
+                instance.build()
+            instance.verify_built_images.assert_called_once()
             instance.stop_apps.assert_not_called()
 
     def test_registry_policy_is_scoped_to_apps_and_migration_jobs(self):
