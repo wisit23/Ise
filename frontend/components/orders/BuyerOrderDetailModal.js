@@ -19,6 +19,10 @@ import OrderDeliveryTimeline from "./OrderDeliveryTimeline";
 // parcel ready, the address is printed on it and the backend refuses changes.
 export const ADDRESS_EDITABLE_STATUSES = ["paid", "confirmed"];
 
+function formatBaht(value) {
+  return `฿${Number(value).toLocaleString("th-TH")}`;
+}
+
 function formatAddress(a) {
   return [a.addressLine, a.subdistrict, a.district, a.province, a.postalCode]
     .filter(Boolean)
@@ -60,6 +64,7 @@ export default function BuyerOrderDetailModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showPrice, setShowPrice] = useState(false);
 
   // The list row may be stale (and may lack the address / version).
   async function reload() {
@@ -106,6 +111,9 @@ export default function BuyerOrderDetailModal({
     : null;
   const address = order.shippingAddress;
   const canChange = Boolean(order?.status && ADDRESS_EDITABLE_STATUSES.includes(order.status));
+  const netPrice = Number(order.finalPrice ?? order.price);
+  const originalPrice = Number(order.price ?? order.finalPrice);
+  const discount = Number(order.discountAmount ?? originalPrice - netPrice);
 
   async function startEditing() {
     setError("");
@@ -190,7 +198,44 @@ export default function BuyerOrderDetailModal({
           </dd>
           <dt className="text-ink-muted">ราคา</dt>
           <dd className="text-gray-900">
-            ฿{Number(order.finalPrice ?? order.price).toLocaleString("th-TH")}
+            <button
+              type="button"
+              aria-expanded={showPrice}
+              onClick={() => setShowPrice((v) => !v)}
+              className="inline-flex items-center gap-1 font-semibold hover:text-brand-600"
+            >
+              {formatBaht(netPrice)}
+              <span aria-hidden="true" className="text-xs text-ink-muted">
+                {showPrice ? "▲" : "▼"}
+              </span>
+              <span className="text-xs font-normal text-ink-muted">
+                {showPrice ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
+              </span>
+            </button>
+            {showPrice && (
+              <dl
+                aria-label="รายละเอียดราคา"
+                className="mt-2 space-y-1 rounded-lg bg-gray-50 p-3"
+              >
+                <div className="flex justify-between gap-4">
+                  <dt className="text-ink-muted">ราคาสินค้า</dt>
+                  <dd>{formatBaht(originalPrice)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-ink-muted">
+                    ส่วนลดจากโค้ด
+                    {order.campaignCode ? ` (${order.campaignCode})` : ""}
+                  </dt>
+                  <dd className={discount > 0 ? "text-green-600" : ""}>
+                    {discount > 0 ? `-${formatBaht(discount)}` : formatBaht(0)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-line pt-1 font-semibold">
+                  <dt>ราคารวมหลังหักส่วนลด</dt>
+                  <dd>{formatBaht(netPrice)}</dd>
+                </div>
+              </dl>
+            )}
           </dd>
           <dt className="text-ink-muted">สถานะ</dt>
           <dd className="text-gray-900">{statusLabel}</dd>
