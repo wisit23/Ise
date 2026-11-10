@@ -98,7 +98,9 @@ async function sweep({ where, scope = {}, status, purpose }) {
   for (const row of rows) {
     try {
       const { event } = await transition({
-        order: orderModel.view(row),
+        // Keep the stored status for optimistic writes; views may already
+        // report delivery from the persisted deadline before this sweep.
+        order: { ...orderModel.view(row), status: row.status },
         status,
         actorId: SYSTEM_ACTOR,
         purpose,
@@ -126,7 +128,11 @@ function deliverInTransitOrders(now = new Date(), scope) {
     scope,
     where: {
       status: "in_transit",
-      shippedAt: { lte: ago(timing.deliveryDelayMs(), now) },
+      OR: [
+        { deliveredAt: { lte: now } },
+        // Legacy shipments have no persisted deadline yet.
+        { deliveredAt: null, shippedAt: { lte: ago(timing.deliveryDelayMs(), now) } },
+      ],
     },
     status: "delivered",
     purpose: "AUTO_DELIVERED",

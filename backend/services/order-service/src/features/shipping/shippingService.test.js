@@ -202,6 +202,8 @@ test("handoff updates both statuses, trims tracking, stamps shippedAt and retain
   const updated = await f.service.advanceShipping(handoff());
   assert.equal(updated.status, "in_transit");
   assert.ok(updated.shippedAt instanceof Date);
+  assert.ok(updated.deliveredAt instanceof Date);
+  assert.equal(updated.deliveredAt.getTime() - updated.shippedAt.getTime(), 10_000);
   assert.equal(updated.version, 4);
   assert.deepEqual(updated.shipping, { ...before, status: "in_transit", company: "Flash Express", trackingNumber: "TH123456789TH" });
   assert.equal(f.writes.find((w) => w.table === "log").data.action, "IN_TRANSIT");

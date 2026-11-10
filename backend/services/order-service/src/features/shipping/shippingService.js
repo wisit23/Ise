@@ -173,9 +173,11 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       const shippingDetails = { company: carrier.trim(), trackingNumber: tracking.trim() };
       if (version !== undefined && version !== order.version)
         throw conflict("order was modified — reload and retry");
+      const shippedAt = new Date();
+      const deliveredAt = new Date(shippedAt.getTime() + require("../../services/orderLifecycle").timing.deliveryDelayMs());
       const changed = await tx.order.updateMany({
         where: { id: orderId, version: order.version, status: order.status },
-        data: { ...(!editing ? { status } : {}), ...(handoff ? { shippedAt: new Date() } : {}), version: { increment: 1 } },
+        data: { ...(!editing ? { status } : {}), ...(handoff ? { shippedAt, deliveredAt } : {}), version: { increment: 1 } },
       });
       if (changed.count !== 1)
         throw conflict("order changed or is not awaiting shipment");

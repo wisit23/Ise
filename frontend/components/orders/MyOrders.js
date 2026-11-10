@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import useDeliveryDeadlines from "../../lib/useDeliveryDeadlines";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Pagination from "../Pagination";
@@ -160,6 +161,7 @@ export default function MyOrders({
   }
   const urlOrderId = searchParams?.get("orderId");
   const [items, setItems] = useState([]);
+  useDeliveryDeadlines(items, setItems);
   const [tab, setTab] = useState(initialTab);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);

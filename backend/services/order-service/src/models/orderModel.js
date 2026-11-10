@@ -70,7 +70,15 @@ function disputeView(row) {
         : row.status || "OPEN",
   };
 }
-function view(row) {
+// deliveredAt is the persisted simulated arrival deadline for in-transit orders.
+// Reading an order must not depend on the background worker having run.
+function hasArrived(row, now = new Date()) {
+  return row.status === "in_transit" && row.deliveredAt &&
+    new Date(row.deliveredAt) <= now &&
+    !row.payments?.some((payment) => payment.holds?.some((hold) => !hold.releaseAt)) &&
+    !(row.dispute && !row.dispute.deletedAt && !row.dispute.decision);
+}
+function view(row, now = new Date()) {
   if (!row) return null;
   const { logs, ...fields } = row;
   let cancellationReason = null;
@@ -91,6 +99,10 @@ function view(row) {
   const active = holds.filter((h) => !h.releaseAt);
   return {
     ...fields,
+    ...(hasArrived(row, now) ? {
+      status: "delivered",
+      shipping: row.shipping ? { ...row.shipping, status: "delivered" } : row.shipping,
+    } : {}),
     cancellationReason,
     deliveryTimeline: deliveryTimeline(logs),
     price: Number(row.originalAmount),
@@ -158,18 +170,34 @@ async function list(where, { skip, take } = {}) {
     }),
     prisma.order.count({ where }),
   ]);
-  return { items: items.map(view), total };
+  return { items: items.map((row) => view(row)), total };
 }
 function statusFilter(status) {
-  // A comma-separated list groups statuses into one filter (e.g. "delivered,completed").
-  return status.includes(",") ? { in: status.split(",") } : status;
+  const statuses = status.split(",");
+  if (!statuses.some((value) => ["in_transit", "delivered"].includes(value)))
+    return { status: statuses.length > 1 ? { in: statuses } : status };
+  const due = {
+    status: "in_transit",
+    deliveredAt: { lte: new Date() },
+    payments: { none: { holds: { some: { releaseAt: null } } } },
+    OR: [{ dispute: null }, { dispute: { deletedAt: { not: null } } }, { dispute: { decision: { not: null } } }],
+  };
+  return { OR: statuses.map((value) => {
+    if (value === "delivered") return { OR: [{ status: "delivered" }, due] };
+    if (value === "in_transit") return { status: "in_transit", OR: [
+      { deliveredAt: null }, { deliveredAt: { gt: due.deliveredAt.lte } },
+      { payments: { some: { holds: { some: { releaseAt: null } } } } },
+      { dispute: { deletedAt: null, decision: null } },
+    ] };
+    return { status: value };
+  }) };
 }
 function listByBuyer(buyerId, options = {}) {
   const { status } = options;
   return list(
     {
       buyerId,
-      ...(status ? { status: statusFilter(status) } : {}),
+      ...(status ? statusFilter(status) : {}),
       ...(status === "pending_payment"
         ? {
             OR: [
@@ -189,7 +217,7 @@ function listBySeller(sellerId, options = {}) {
   return list(
     {
       sellerId,
-      ...(options.status ? { status: statusFilter(options.status) } : {}),
+      ...(options.status ? statusFilter(options.status) : {}),
     },
     options,
   );
@@ -214,7 +242,7 @@ async function findAuctionOrdersDueForSettlement(now = new Date(), take = 50) {
     orderBy: [{ paymentDeadlineAt: "asc" }, { createdAt: "asc" }],
     take,
   });
-  return rows.map(view);
+  return rows.map((row) => view(row));
 }
 
 async function claimExpiredAuctionOrder({ id, expectedVersion, now = new Date() }) {
@@ -372,13 +400,22 @@ async function transitionStatusWithProductSync({
       assertCanCancelOrder(before);
     if (refunding) assertCanParticipantUpdateStatus(view(before));
     const now = new Date();
+    const arrived = hasArrived(before, now);
+    if (status === "completed") {
+      assertCanParticipantUpdateStatus(view(before, now));
+      if (before.status !== "delivered" && !arrived)
+        throw conflict("cannot confirm receipt before delivery");
+    }
     const claimed = await tx.order.updateMany({
       where: {
         id,
         version: expectedVersion,
-        ...(expectedStatuses ? { status: { in: expectedStatuses } } : {}),
+        ...(expectedStatuses ? { status: { in: arrived && expectedStatuses.includes("delivered")
+          ? [...expectedStatuses, "in_transit"] : expectedStatuses } } : {}),
       },
-      data: statusData(status, now),
+      data: { ...statusData(status, now),
+        ...(status === "delivered" && before.deliveredAt ? { deliveredAt: before.deliveredAt } : {}),
+      },
     });
     if (claimed.count !== 1)
       throw conflict("order was modified concurrently — reload and retry");
@@ -393,7 +430,7 @@ async function transitionStatusWithProductSync({
           paidAt: now,
         },
       });
-    if (status === "delivered" && before.shipping)
+    if ((status === "delivered" || (status === "completed" && arrived)) && before.shipping)
       await tx.shipping.update({
         where: { orderId: id },
         data: { status: "delivered" },

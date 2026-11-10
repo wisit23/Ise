@@ -62,6 +62,58 @@ function fixture(
   return { writes, order };
 }
 
+test("persisted delivery deadline changes the API view exactly at arrival, without a sweep", () => {
+  const at = new Date("2026-11-10T00:00:10Z");
+  const row = { status: "in_transit", deliveredAt: at, shipping: { status: "in_transit" }, originalAmount: "100", ordersAmount: "100" };
+  assert.equal(model.view(row, new Date(at.getTime() - 1)).status, "in_transit");
+  assert.equal(model.view(row, at).status, "delivered");
+  assert.equal(model.view(row, at).shipping.status, "delivered");
+  assert.equal(row.status, "in_transit", "reading does not mutate stored state");
+  assert.equal(model.view({ ...row, payments: [{ holds: [{ releaseAt: null }] }] }, at).status, "in_transit");
+});
+
+for (const due of [false, true]) {
+  test(`receipt confirmation without a sweep: deadline ${due ? "reached" : "not reached"}`, async (t) => {
+    const { order, writes } = fixture(t, { status: "in_transit" });
+    order.deliveredAt = new Date(Date.now() + (due ? -1000 : 60_000));
+    const call = () => model.transitionStatusWithProductSync({ id: "o", status: "completed", expectedVersion: 1, expectedStatuses: ["delivered"], actorId: "buyer" });
+    if (!due) {
+      await assert.rejects(call(), { status: 409 });
+      assert.equal(writes.length, 0);
+    } else {
+      const result = await call();
+      assert.equal(result.order.status, "completed");
+      assert.ok(writes[0].where.status.in.includes("in_transit"));
+      assert.equal(result.order.deliveredAt, order.deliveredAt);
+    }
+  });
+}
+
+test("delivery reconciliation retains the scheduled timestamp instead of the sweep time", async (t) => {
+  const { order, writes } = fixture(t, { status: "in_transit" });
+  order.deliveredAt = new Date(Date.now() - 3000);
+  await model.transitionStatusWithProductSync({ id: "o", status: "delivered", expectedVersion: 1, expectedStatuses: ["in_transit"], actorId: "system" });
+  assert.equal(writes[0].data.deliveredAt, order.deliveredAt);
+});
+
+for (const method of ["listByBuyer", "listBySeller"]) {
+  test(`${method} uses delivery deadlines in both rows and pagination filters`, async (t) => {
+    const queries = [];
+    t.mock.method(prisma.order, "findMany", async ({ where }) => { queries.push(where); return []; });
+    const delegate = prisma.order;
+    Object.defineProperty(delegate, "count", { value: async ({ where }) => { assert.equal(where, queries.at(-1)); return 0; }, configurable: true });
+    t.after(() => delete delegate.count);
+    await model[method]("user", { status: "delivered,completed" });
+    const due = queries[0].OR[0].OR[1];
+    assert.equal(due.status, "in_transit");
+    assert.ok(due.deliveredAt.lte instanceof Date);
+    assert.ok(due.payments.none.holds.some);
+    await model[method]("user", { status: "in_transit" });
+    assert.deepEqual(queries[1].OR[0].OR[0], { deliveredAt: null });
+    assert.ok(queries[1].OR[0].OR[1].deliveredAt.gt instanceof Date);
+  });
+}
+
 test("the order vocabulary separates expiry from explicit cancellation", () => {
   assert.equal(model.VALID_STATUSES.includes("inbasket"), false);
   assert.ok(model.VALID_STATUSES.includes("payment_expired"));

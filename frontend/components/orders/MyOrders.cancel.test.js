@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import MyOrders from "./MyOrders";
 import { apiFetch } from "../../lib/api";
 
@@ -24,6 +24,24 @@ beforeEach(() => {
     if (url === "/api/orders/order-1") return order;
     return { items: [] };
   });
+});
+
+test("buyer sees receipt confirmation at ten seconds without a socket event or polling", async () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date("2026-11-10T00:00:00Z"));
+  try {
+    Object.assign(order, { status: "in_transit", deliveredAt: "2026-11-10T00:00:10Z" });
+    render(<MyOrders />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /ได้รับสินค้าแล้ว/ })).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(9999));
+    expect(screen.queryByRole("button", { name: /ได้รับสินค้าแล้ว/ })).not.toBeInTheDocument();
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByRole("button", { name: /ได้รับสินค้าแล้ว/ })).toBeInTheDocument();
+    expect(apiFetch.mock.calls.filter(([url]) => url.startsWith("/api/orders/mine"))).toHaveLength(1);
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("buyer explicitly confirms paid cancellation and the button disappears after success", async () => {

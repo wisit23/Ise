@@ -24,6 +24,7 @@ import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { useChatSocketEvent } from "../../../components/chat/ChatSocketProvider";
 import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
+import useDeliveryDeadlines from "../../../lib/useDeliveryDeadlines";
 
 const TREND_DAYS = 7;
 
@@ -74,6 +75,7 @@ function SellerDashboardContent() {
   const [user, setUser] = useState(undefined);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  useDeliveryDeadlines(orders, setOrders);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [kycStatus, setKycStatus] = useState(null);

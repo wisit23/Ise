@@ -385,17 +385,20 @@ async function openDispute({
   classification,
 }) {
   return prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({ where: { id: orderId } });
+    const order = await tx.order.findUnique({ where: { id: orderId }, include: orderModel.INCLUDE });
     if (!order) throw notFound("order not found");
+    const effectiveStatus = orderModel.view(order).status;
     const changed = await tx.order.updateMany({
       where: {
         id: orderId,
         version: expectedVersion ?? order.version,
-        status: { in: ["delivered", "completed", "disputed"] },
+        status: { in: effectiveStatus === "delivered" && order.status === "in_transit"
+          ? ["delivered", "completed", "disputed", "in_transit"]
+          : ["delivered", "completed", "disputed"] },
       },
       data: {
         status: "disputed",
-        preDisputeStatus: order.preDisputeStatus || order.status,
+        preDisputeStatus: order.preDisputeStatus || effectiveStatus,
         version: { increment: 1 },
       },
     });

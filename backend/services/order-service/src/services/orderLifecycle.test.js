@@ -177,7 +177,7 @@ test("in-transit orders older than the handoff delay become delivered", async (t
   const { queries, transitions } = sweepFixture(t, [order("in_transit")]);
   assert.equal(await lifecycleService.deliverInTransitOrders(now), 1);
   assert.equal(queries[0].where.AND[0].status, "in_transit");
-  assert.equal(queries[0].where.AND[0].shippedAt.lte.toISOString(), "2026-10-16T00:00:00.000Z");
+  assert.equal(queries[0].where.AND[0].OR[1].shippedAt.lte.toISOString(), "2026-10-16T00:00:00.000Z");
   assert.ok(queries[0].where.AND[1].payments.none, "held orders are skipped");
   assert.equal(transitions[0].status, "delivered");
   assert.deepEqual(transitions[0].expectedStatuses, ["in_transit"]);
@@ -189,7 +189,7 @@ test("pickup never auto-delivers, even with an old shippedAt", async (t) => {
   const rows = [order("pickup_in_progress", { shippedAt: new Date(0) }), order("in_transit", { shippedAt: new Date(0) })];
   const transitions = mockEffects(t);
   t.mock.method(prisma.order, "findMany", async ({ where }) => rows.filter((row) =>
-    row.status === where.AND[0].status && row.shippedAt <= where.AND[0].shippedAt.lte));
+    row.status === where.AND[0].status && row.shippedAt <= where.AND[0].OR[1].shippedAt.lte));
   assert.equal(await lifecycleService.deliverInTransitOrders(new Date()), 1);
   assert.deepEqual(transitions.map((input) => input.expectedStatuses), [["in_transit"]]);
 });
@@ -271,6 +271,17 @@ function controllerApp(t, current, userId) {
   return { app, transitions };
 }
 
+for (const reached of [false, true]) {
+  test(`PATCH receipt uses persisted arrival deadline without a worker (${reached})`, async (t) => {
+    const current = order("in_transit", { deliveredAt: new Date(Date.now() + (reached ? -1000 : 60_000)) });
+    const { app, transitions } = controllerApp(t, current, "buyer");
+    t.mock.method(orderModel, "findById", async () => orderModel.view(current));
+    const res = await request(app).patch("/order-1/status").send({ status: "completed" });
+    assert.equal(res.status, reached ? 200 : 409, JSON.stringify(res.body));
+    assert.equal(transitions.length, reached ? 1 : 0);
+  });
+}
+
 test("PATCH: seller cannot mark an in-transit order completed", async (t) => {
   const { app, transitions } = controllerApp(t, order("in_transit"), "seller");
   const res = await request(app).patch("/order-1/status").send({ status: "completed" });
@@ -323,6 +334,7 @@ test("PATCH: seller requests pickup then hands off through the transactional shi
   assert.equal(handoff.body.shipping.trackingNumber, "TRK12345");
   assert.deepEqual(handoff.body.shipping.addressSnapshot, { recipientName: "Buyer" });
   assert.ok(handoff.body.shippedAt);
+  assert.equal(new Date(handoff.body.deliveredAt) - new Date(handoff.body.shippedAt), 10_000);
   assert.equal(transactions, 3);
   assert.deepEqual(logs.map((log) => log.action), ["PICKUP_REQUESTED", "IN_TRANSIT"]);
   assert.equal(transitions.length, 0, "shipping uses its atomic service, not a status-only update");
