@@ -1,6 +1,7 @@
 const { badRequest } = require("@reloop/shared");
+const { reviewStorage } = require("../middleware/upload");
 
-function uploadReviewMedia(req, res, next) {
+async function uploadReviewMedia(req, res, next) {
   try {
     if (!req.files || req.files.length === 0) {
       throw badRequest("at least one review media file is required");
@@ -15,6 +16,7 @@ function uploadReviewMedia(req, res, next) {
 
     res.status(201).json({ media });
   } catch (err) {
+    await Promise.allSettled((req.files || []).map((file) => reviewStorage.discardUpload(file)));
     next(err);
   }
 }

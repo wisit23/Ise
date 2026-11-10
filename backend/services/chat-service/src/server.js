@@ -1,23 +1,33 @@
 require("dotenv").config();
-const { requireEnv } = require("@reloop/shared");
+const { requireEnv, createServiceRuntime } = require("@reloop/shared");
 
 requireEnv(["DATABASE_URL"]);
 
-const http = require("http");
 const app = require("./app");
 const { createSocketServer } = require("./realtime/socketServer");
 
+const prisma = require("./models/prismaClient");
+const runtime = createServiceRuntime({
+  app,
+  service: "chat-service",
+  checks: [
+    () => prisma.$runCommandRaw({ ping: 1 }),
+    () => socketServer.checkReady(),
+  ],
+});
+runtime.addResource(() => prisma.$disconnect());
+runtime.installSignals();
+
 const PORT = process.env.CHAT_PORT || 3004;
-// Socket.IO attaches to the raw http.Server, not the Express app directly —
-// app.listen() would create one implicitly but not hand back a reference
-// this file can pass to createSocketServer, so it's created explicitly here
-// instead.
-const server = http.createServer(app);
-createSocketServer(server);
-// close() exists for test harnesses; the long-running process just gets
-// killed, so it's intentionally unused here.
+const server = runtime.server;
+const socketServer = createSocketServer(server);
+runtime.addDrain(() => socketServer.close());
+runtime.addResource(() => require("./realtime/presence").disconnect());
+runtime.addResource(() =>
+  require("./middleware/rateLimit").closeRateLimitClient(),
+);
 
 const { startSupportSyncWorker } = require("./features/sync/supportSyncWorker");
-startSupportSyncWorker();
+runtime.addWorker(startSupportSyncWorker().stop);
 
 server.listen(PORT, () => console.log(`[chat-service] listening on ${PORT}`));

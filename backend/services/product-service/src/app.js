@@ -8,10 +8,10 @@ const productNameRoutes = require("./features/metrics/productNames");
 const reservationRoutes = require("./features/reservations/reservationRoutes");
 const internalCampaignRoutes = require("./features/campaigns/internalCampaignRoutes");
 const internalAuctionRoutes = require("./features/auctions/internalAuctionRoutes");
-const { UPLOAD_DIR } = require("./middleware/upload");
+const { mediaStorage } = require("./middleware/upload");
 const reviewRoutes = require("./features/reviews/routes/reviewRoutes");
 const reviewUploadRoutes = require("./features/reviews/routes/uploadRoutes");
-const { REVIEW_UPLOAD_DIR } = require("./features/reviews/middleware/upload");
+const { reviewStorage } = require("./features/reviews/middleware/upload");
 
 const app = express();
 app.use(require("@reloop/shared").referenceAliases(require("./models/prismaClient"), "product"));
@@ -24,12 +24,12 @@ app.get("/health", (req, res) =>
 
 app.use("/executive", metricsRoutes);
 
-// Uploaded media is served directly as static files; the gateway proxies
+// Uploaded media is streamed from the selected storage driver; the gateway proxies
 // GET /uploads/* to this service without requiring a bearer token (public
 // marketplace images), while POST /uploads below still requires auth.
-app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/uploads", mediaStorage.publicMiddleware);
 app.use("/uploads", uploadRoutes);
-app.use("/review-uploads", express.static(REVIEW_UPLOAD_DIR));
+app.use("/review-uploads", reviewStorage.publicMiddleware);
 app.use("/reviews/uploads", reviewUploadRoutes);
 app.use("/reviews", reviewRoutes);
 

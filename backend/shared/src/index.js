@@ -1,4 +1,6 @@
 module.exports = {
+  ...require("./serviceRuntime"),
+  ...require("./mediaStorage"),
   ...require("./referenceDisplay"),
   ...require("./referenceCodes"),
   ...require("./referenceAliases"),

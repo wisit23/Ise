@@ -18,19 +18,17 @@ async function checkOverdue(now = new Date()) {
 }
 let timer;
 function start(intervalMs = customerServiceRuntime.slaMonitorIntervalMs) {
-  if (timer) return;
-  timer = setInterval(
-    () =>
-      checkOverdue().catch((error) =>
-        console.error("[sla-monitor]", error.message),
-      ),
-    intervalMs,
-  );
-  timer.unref();
+  if (!timer)
+    timer = require("@reloop/shared").startPeriodicTask(
+      checkOverdue,
+      intervalMs,
+    );
+  return timer;
 }
-function stop() {
-  if (timer) clearInterval(timer);
+async function stop() {
+  const current = timer;
   timer = null;
+  await current?.stop();
 }
 async function runOnce(now = new Date()) {
   return (await checkOverdue(now)).breached;

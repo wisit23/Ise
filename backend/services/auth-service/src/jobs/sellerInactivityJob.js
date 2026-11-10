@@ -54,13 +54,10 @@ async function runInactivityCheck() {
 }
 
 function start() {
-  setTimeout(() => {
-    runInactivityCheck();
-    setInterval(runInactivityCheck, RUN_INTERVAL_MS);
-  }, START_DELAY_MS);
-
-  console.log(
-    "[sellerInactivityJob] scheduled — first run in 2 min, then every 24 h",
+  return require("@reloop/shared").startPeriodicTask(
+    runInactivityCheck,
+    RUN_INTERVAL_MS,
+    { delayMs: START_DELAY_MS },
   );
 }
 

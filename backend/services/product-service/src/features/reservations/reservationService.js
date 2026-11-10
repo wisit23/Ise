@@ -199,15 +199,11 @@ async function releaseExpiredReservations({ now = new Date() } = {}) {
 }
 
 function startReservationExpiryWorker() {
-  const sweep = () => {
-    releaseExpiredReservations().catch((error) => {
-      console.error("[product-service] reservation expiry sweep failed", error);
-    });
-  };
-  sweep();
-  const timer = setInterval(sweep, EXPIRY_SWEEP_INTERVAL_MS);
-  timer.unref();
-  return timer;
+  return require("@reloop/shared").startPeriodicTask(
+    releaseExpiredReservations,
+    EXPIRY_SWEEP_INTERVAL_MS,
+    { immediate: true },
+  );
 }
 
 module.exports = {

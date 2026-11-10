@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { requireEnv } = require("@reloop/shared");
+const { requireEnv, createServiceRuntime } = require("@reloop/shared");
 
 requireEnv(["DATABASE_URL"]);
 
@@ -12,21 +12,34 @@ const attributionOutboxService = require("./services/attributionOutboxService");
 const auctionSettlementService = require("./features/auctionSettlements/auctionSettlementService");
 const orderLifecycleService = require("./services/orderLifecycleService");
 
+const prisma = require("./models/prismaClient");
+const runtime = createServiceRuntime({
+  app,
+  service: "order-service",
+  checks: [() => prisma.$queryRaw`SELECT 1`],
+});
+runtime.addResource(() => prisma.$disconnect());
+runtime.installSignals();
+
 const PORT = process.env.ORDER_PORT || 3003;
-app.listen(PORT, () => {
+runtime.server.listen(PORT, () => {
   console.log(`[order-service] listening on ${PORT}`);
-  const timer = setInterval(() => {
-    orderModel.cleanExpiredOrders(productClient).catch((err) => {
-      console.warn("[order-service] sweep failed:", err.message);
-    });
-  }, 15000);
-  timer.unref();
-  checkoutSessionService.startExpiryWorker();
-  productSyncService.startWorker();
-  attributionOutboxService.startWorker();
-  require("@reloop/shared/src/caseRetention").startCaseRetention(
-    require("./models/prismaClient"), require("./generated/prisma-client").Prisma, "disputes",
+  runtime.addWorker(
+    require("@reloop/shared").startPeriodicTask(
+      () => orderModel.cleanExpiredOrders(productClient),
+      15000,
+    ).stop,
   );
-  auctionSettlementService.startWorker();
-  orderLifecycleService.startWorker();
+  runtime.addWorker(checkoutSessionService.startExpiryWorker().stop);
+  runtime.addWorker(productSyncService.startWorker().stop);
+  runtime.addWorker(attributionOutboxService.startWorker().stop);
+  runtime.addWorker(
+    require("@reloop/shared/src/caseRetention").startCaseRetention(
+      require("./models/prismaClient"),
+      require("./generated/prisma-client").Prisma,
+      "disputes",
+    ),
+  );
+  runtime.addWorker(auctionSettlementService.startWorker().stop);
+  runtime.addWorker(orderLifecycleService.startWorker().stop);
 });

@@ -1243,15 +1243,11 @@ function createCampaignService(
   }
 
   function startCampaignExpiryWorker(intervalMs = 30000) {
-    const sweep = () => {
-      repository.autoExpireCampaigns().catch((err) => {
-        console.error("[product-service] campaign expiry sweep failed", err);
-      });
-    };
-    sweep();
-    const timer = setInterval(sweep, intervalMs);
-    timer.unref();
-    return timer;
+    return require("@reloop/shared").startPeriodicTask(
+      () => repository.autoExpireCampaigns(),
+      intervalMs,
+      { immediate: true },
+    );
   }
 
   return {

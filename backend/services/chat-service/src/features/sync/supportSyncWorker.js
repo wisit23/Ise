@@ -78,10 +78,41 @@ async function deliverMessage(
   }
 }
 
+async function claimMessage(message) {
+  if (!["PENDING", "FAILED"].includes(message.syncStatus)) return false;
+  const now = new Date();
+  const result = await prisma.message.updateMany({
+    where: {
+      id: message.id,
+      syncStatus: message.syncStatus,
+      AND: [
+        {
+          OR: [
+            { nextRetryAt: null },
+            { nextRetryAt: { isSet: false } },
+            { nextRetryAt: { lte: now } },
+          ],
+        },
+        {
+          OR: [
+            { nextRetryAt: message.nextRetryAt ?? null },
+            ...(message.nextRetryAt == null
+              ? [{ nextRetryAt: { isSet: false } }]
+              : []),
+          ],
+        },
+      ],
+    },
+    data: { nextRetryAt: new Date(now.getTime() + REQUEST_TIMEOUT_MS + 30000) },
+  });
+  return result.count === 1;
+}
+
 async function syncSupportMessage(conversation, message) {
   if (!conversation || conversation.contextType !== "SUPPORT") return;
   try {
-    await deliverMessage(conversation, message);
+    if (await claimMessage(message))
+      await deliverMessage(conversation, message);
   } catch (error) {
     // The message was persisted as PENDING before this call. A failure to
     // update retry metadata must not turn into an unhandled rejection.
@@ -103,7 +134,11 @@ async function processPendingMessages({ limit = 50 } = {}) {
   const messages = await prisma.message.findMany({
     where: {
       syncStatus: { in: ["PENDING", "FAILED"] },
-      OR: [{ nextRetryAt: null }, { nextRetryAt: { lte: new Date() } }],
+      OR: [
+        { nextRetryAt: null },
+        { nextRetryAt: { isSet: false } },
+        { nextRetryAt: { lte: new Date() } },
+      ],
     },
     take: limit,
     orderBy: { createdAt: "asc" },
@@ -115,40 +150,35 @@ async function processPendingMessages({ limit = 50 } = {}) {
       where: { id: message.conversationId },
     });
     if (!conversation) continue;
+    // Compare-and-set the retry timestamp: only one replica owns this attempt.
+    // A crashed owner leaves a bounded lease, not a permanently stuck message.
+    if (!(await claimMessage(message))) continue;
     if (await deliverMessage(conversation, message)) synced += 1;
   }
   return { processed: messages.length, synced };
 }
 
 let workerTimer = null;
-let workerEnabled = false;
-let pollInProgress = false;
 
 function startSupportSyncWorker(
   intervalMs = customerServiceRuntime.syncPollIntervalMs,
 ) {
-  if (workerTimer) return;
-  workerEnabled = true;
-  const runCycle = async () => {
-    if (!workerEnabled || pollInProgress) return;
-    pollInProgress = true;
-    try {
-      await processPendingMessages();
-    } catch (error) {
-      console.error("[support-sync] retry poll failed:", error.message);
-    } finally {
-      pollInProgress = false;
-    }
-  };
-  workerTimer = setInterval(runCycle, intervalMs);
-  workerTimer.unref?.();
+  if (!workerTimer)
+    workerTimer = require("@reloop/shared").startPeriodicTask(
+      processPendingMessages,
+      intervalMs,
+      {
+        onError: (error) =>
+          console.error("[support-sync] retry poll failed:", error.message),
+      },
+    );
+  return workerTimer;
 }
 
-function stopSupportSyncWorker() {
-  workerEnabled = false;
-  if (workerTimer) clearInterval(workerTimer);
+async function stopSupportSyncWorker() {
+  const current = workerTimer;
   workerTimer = null;
-  pollInProgress = false;
+  await current?.stop();
 }
 
 module.exports = {

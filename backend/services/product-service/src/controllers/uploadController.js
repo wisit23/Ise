@@ -3,9 +3,11 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { optimizeListingImage } = require("../services/listingImage");
+const { mediaStorage } = require("../middleware/upload");
 
 async function uploadMedia(req, res, next) {
   const createdPaths = [];
+  const persistedKeys = [];
   try {
     if (!req.files || req.files.length === 0) {
       throw badRequest("at least one file is required");
@@ -32,6 +34,12 @@ async function uploadMedia(req, res, next) {
         await fs.writeFile(outputPath, buffer, { flag: "wx" });
         await fs.unlink(file.path);
       }
+      persistedKeys.push(filename);
+      await mediaStorage.persistUpload({
+        filename,
+        path: path.join(path.dirname(file.path), filename),
+        mimetype: isVideo ? file.mimetype : "image/webp",
+      });
       media.push({
         url: `/uploads/${filename}`,
         type: isVideo ? "video" : "image",
@@ -40,6 +48,7 @@ async function uploadMedia(req, res, next) {
     res.status(201).json({ media });
   } catch (err) {
     await Promise.allSettled([
+      ...persistedKeys.map((key) => mediaStorage.remove(key)),
       ...(req.files || []).map((file) => fs.rm(file.path, { force: true })),
       ...createdPaths.map((filePath) => fs.rm(filePath, { force: true })),
     ]);

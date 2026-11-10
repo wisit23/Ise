@@ -1,25 +1,18 @@
-const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const multer = require("multer");
-const { badRequest } = require("@reloop/shared");
+const { badRequest, createMediaStorage } = require("@reloop/shared");
 const { MAX_VIDEO_BYTES } = require("../services/listingVideo");
 
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const mediaStorage = createMediaStorage({ directory: UPLOAD_DIR, namespace: "products" });
 
 const ALLOWED_MIME = /^image\/(jpeg|png|x-png|pjpeg|webp|gif)$/i;
 const ALLOWED_VIDEO_MIME = /^video\/(mp4|quicktime)$/i;
 const ALLOWED_EXT = /\.(jpe?g|png|webp|gif|mp4|mov)$/i;
 const ALLOWED_VIDEO_EXT = /\.(mp4|mov)$/i;
 
-const storage = multer.diskStorage({
-  destination: UPLOAD_DIR,
-  filename(req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+// Image conversion and ffprobe need a local scratch file before persistence.
+const storage = mediaStorage.multerStorage(multer, { defer: true });
 
 const upload = multer({
   storage,
@@ -66,4 +59,4 @@ function handleUploadError(err, req, res, next) {
   next(err);
 }
 
-module.exports = { upload, videoUpload, UPLOAD_DIR, handleUploadError };
+module.exports = { upload, videoUpload, UPLOAD_DIR, mediaStorage, handleUploadError };

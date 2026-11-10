@@ -43,14 +43,9 @@ function createSocketServer(httpServer) {
   // remain on the default namespace; guests never receive product payloads.
   io.of("/catalog");
 
-  // Nothing in production ever calls this (the process just exits), but an
-  // open ioredis connection has no natural end on its own — without an
-  // explicit close(), any test harness that spins this server up keeps two
-  // live Redis connections past the test's own teardown, and `node --test`
-  // never exits on its own (found by running this suite once and watching
-  // the process hang after every assertion had already passed).
+  // Shared by production shutdown and test teardown.
   async function close() {
-    io.close();
+    await new Promise((resolve) => io.close(resolve));
     await Promise.all([pubClient.quit(), subClient.quit()]);
   }
 
@@ -232,7 +227,7 @@ function createSocketServer(httpServer) {
   });
 
   broadcast.setIo(io);
-  return { io, close };
+  return { io, close, checkReady: () => Promise.all([pubClient.ping(), subClient.ping()]) };
 }
 
 module.exports = { createSocketServer };

@@ -103,7 +103,9 @@ router.get(
       const evidence = await reportService.viewReportEvidence({ reportId: req.params.id, evidenceId: req.params.evidenceId });
       res.setHeader("Content-Type", evidence.fileType);
       res.setHeader("X-Content-Type-Options", "nosniff");
-      res.sendFile(evidence.path);
+      await require("./reportEvidenceStorage").reportStorage.send(
+        req, res, next, require("node:path").basename(evidence.path),
+      );
     } catch (error) { next(error); }
   },
 );

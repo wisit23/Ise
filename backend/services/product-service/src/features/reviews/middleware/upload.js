@@ -1,8 +1,6 @@
-const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const multer = require("multer");
-const { badRequest } = require("@reloop/shared");
+const { badRequest, createMediaStorage } = require("@reloop/shared");
 
 const REVIEW_UPLOAD_DIR = path.join(
   __dirname,
@@ -12,19 +10,13 @@ const REVIEW_UPLOAD_DIR = path.join(
   "..",
   "review-uploads",
 );
-fs.mkdirSync(REVIEW_UPLOAD_DIR, { recursive: true });
+const reviewStorage = createMediaStorage({ directory: REVIEW_UPLOAD_DIR, namespace: "reviews" });
 
 const ALLOWED_IMAGE_MIME = /^image\/(jpeg|png|x-png|pjpeg|webp|gif)$/i;
 const ALLOWED_VIDEO_MIME = /^video\/(mp4|quicktime)$/i;
 const ALLOWED_EXT = /\.(jpe?g|png|webp|gif|mp4|mov)$/i;
 
-const storage = multer.diskStorage({
-  destination: REVIEW_UPLOAD_DIR,
-  filename(req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+const storage = reviewStorage.multerStorage(multer);
 
 const reviewUpload = multer({
   storage,
@@ -42,4 +34,4 @@ const reviewUpload = multer({
   },
 });
 
-module.exports = { reviewUpload, REVIEW_UPLOAD_DIR };
+module.exports = { reviewUpload, REVIEW_UPLOAD_DIR, reviewStorage };

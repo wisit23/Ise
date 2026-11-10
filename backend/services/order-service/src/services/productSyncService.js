@@ -91,22 +91,11 @@ async function processPendingEvents({
   );
 }
 function startWorker() {
-  let running = false;
-  const sweep = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await processPendingEvents();
-    } catch (error) {
-      console.error("[order-service] product sync sweep failed", error);
-    } finally {
-      running = false;
-    }
-  };
-  void sweep();
-  const timer = setInterval(sweep, 15000);
-  timer.unref();
-  return timer;
+  return require("@reloop/shared").startPeriodicTask(
+    processPendingEvents,
+    15000,
+    { immediate: true },
+  );
 }
 module.exports = {
   ACTIONS,

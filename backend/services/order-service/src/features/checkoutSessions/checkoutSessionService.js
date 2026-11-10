@@ -457,22 +457,17 @@ function createCheckoutSessionService(
     return rows.length;
   }
   function startExpiryWorker() {
-    let running = false;
-    const timer = setInterval(async () => {
-      if (running) return;
-      running = true;
-      try {
-        await expireDue();
-      } catch (error) {
-        console.error("[order-service] checkout expiry sweep failed", error);
-      } finally {
-        running = false;
-      }
-    }, 5000);
-    timer.unref();
-    return timer;
+    return require("@reloop/shared").startPeriodicTask(expireDue, 5000);
   }
-  return { create, get, confirm, cancel, updateAddress, expireDue, startExpiryWorker };
+  return {
+    create,
+    get,
+    confirm,
+    cancel,
+    updateAddress,
+    expireDue,
+    startExpiryWorker,
+  };
 }
 const service = createCheckoutSessionService(
   prisma,

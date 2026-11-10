@@ -1,5 +1,5 @@
 const kycService = require("./kycService");
-const { upload } = require("./kycStorage");
+const { upload, documentStorage } = require("./kycStorage");
 
 const submit = [
   upload.single("document"),
@@ -41,7 +41,7 @@ async function viewDocument(req, res, next) {
       requestId: req.id,
     });
     res.setHeader("Content-Type", fileType);
-    require("fs").createReadStream(filePath).pipe(res);
+    await documentStorage.send(req, res, next, require("node:path").basename(filePath));
   } catch (err) {
     next(err);
   }

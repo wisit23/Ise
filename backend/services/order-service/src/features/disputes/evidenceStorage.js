@@ -5,27 +5,19 @@ const {
 // uploads/ tree, which the gateway serves publicly at /uploads/ for guests
 // (see gateway/src/app.js PUBLIC_PATHS). Evidence for a dispute (photos of
 // damaged goods, ID cards, payment slips) must never be reachable without
-// authorization, so this lives in its own directory that the gateway never
-// proxies as static files — every read goes through evidenceRoutes'
+// authorization, so this uses its own directory / S3 namespace that is never
+// exposed as static files — every read goes through evidenceRoutes'
 // requireAuth + assertDisputeAccess + audit-logged controller instead.
-const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const multer = require("multer");
-const { badRequest } = require("@reloop/shared");
+const { badRequest, createMediaStorage } = require("@reloop/shared");
 
 const STORAGE_DIR = path.join(__dirname, "..", "..", "..", "private-evidence");
-fs.mkdirSync(STORAGE_DIR, { recursive: true });
+const evidenceStorage = createMediaStorage({ directory: STORAGE_DIR, namespace: "dispute-evidence" });
 
 const ALLOWED_MIME = new Set(evidence.mimeTypes);
 
-const storage = multer.diskStorage({
-  destination: STORAGE_DIR,
-  filename(req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+const storage = evidenceStorage.multerStorage(multer);
 
 const upload = multer({
   storage,
@@ -49,4 +41,4 @@ function absolutePath(storageKey) {
   return resolved;
 }
 
-module.exports = { STORAGE_DIR, upload, absolutePath };
+module.exports = { STORAGE_DIR, upload, absolutePath, evidenceStorage };

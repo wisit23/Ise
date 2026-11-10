@@ -1,4 +1,41 @@
+const { randomUUID } = require("node:crypto");
 const subscribers = new Map();
+const origin = randomUUID();
+const CHANNEL = "reloop:auction-updates";
+let relay;
+
+async function startRelay({ publisher, subscriber }) {
+  const receive = (channel, raw) => {
+    if (channel !== CHANNEL) return;
+    try {
+      const event = JSON.parse(raw);
+      if (
+        event.origin !== origin &&
+        typeof event.auctionId === "string" &&
+        typeof event.type === "string"
+      ) {
+        publishLocal(event.auctionId, event.type);
+      }
+    } catch {
+      /* Ignore malformed pub/sub messages, never persist them. */
+    }
+  };
+  subscriber.on("message", receive);
+  await subscriber.subscribe(CHANNEL);
+  relay = publisher;
+  return async () => {
+    relay = null;
+    subscriber.off("message", receive);
+    await Promise.all([publisher.quit(), subscriber.quit()]);
+  };
+}
+
+function closeSubscribers() {
+  for (const listeners of subscribers.values()) {
+    for (const res of listeners) res.end();
+  }
+  subscribers.clear();
+}
 
 function subscribe(auctionId, req, res) {
   res.status(200);
@@ -29,6 +66,17 @@ function subscribe(auctionId, req, res) {
 }
 
 function publish(auctionId, type = "auction.updated") {
+  const delivered = publishLocal(auctionId, type);
+  if (relay)
+    relay
+      .publish(CHANNEL, JSON.stringify({ origin, auctionId, type }))
+      .catch((error) =>
+        console.error("[auction-realtime] relay failed:", error.message),
+      );
+  return delivered;
+}
+
+function publishLocal(auctionId, type) {
   const listeners = subscribers.get(auctionId);
   if (!listeners?.size) return 0;
   const payload = `event: auction-update\ndata: ${JSON.stringify({ auctionId, type })}\n\n`;
@@ -45,4 +93,4 @@ function publish(auctionId, type = "auction.updated") {
   return delivered;
 }
 
-module.exports = { subscribe, publish };
+module.exports = { subscribe, publish, startRelay, closeSubscribers };

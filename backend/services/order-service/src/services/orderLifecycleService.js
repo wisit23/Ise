@@ -172,21 +172,10 @@ async function runSweeps(now = new Date(), scope) {
   };
 }
 
-function startWorker(intervalMs = Number(process.env.ORDER_LIFECYCLE_SWEEP_MS) || 5000) {
-  let running = false;
-  const timer = setInterval(() => {
-    if (running) return;
-    running = true;
-    runSweeps()
-      .catch((err) =>
-        console.warn("[order-service] lifecycle sweep failed:", err.message),
-      )
-      .finally(() => {
-        running = false;
-      });
-  }, intervalMs);
-  timer.unref();
-  return timer;
+function startWorker(
+  intervalMs = Number(process.env.ORDER_LIFECYCLE_SWEEP_MS) || 5000,
+) {
+  return require("@reloop/shared").startPeriodicTask(runSweeps, intervalMs);
 }
 
 module.exports = {

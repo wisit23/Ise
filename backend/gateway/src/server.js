@@ -1,16 +1,17 @@
 require("dotenv").config();
 const net = require("net");
 const { URL } = require("url");
-const { requireEnv } = require("@reloop/shared");
+const { requireEnv, createServiceRuntime } = require("@reloop/shared");
 
 requireEnv(["JWT_ACCESS_SECRET"]);
 
 const app = require("./app");
 
 const PORT = process.env.GATEWAY_PORT || 8080;
-const server = app.listen(PORT, () =>
-  console.log(`[gateway] listening on ${PORT}`),
-);
+const runtime = createServiceRuntime({ app, service: "gateway" });
+runtime.installSignals();
+const server = runtime.server;
+server.listen(PORT, () => console.log(`[gateway] listening on ${PORT}`));
 
 // WebSocket upgrades (chat) are proxied with a hand-rolled raw TCP pipe, NOT
 // http-proxy / http-proxy-middleware's `ws: true` helpers. Both were tried
@@ -30,9 +31,14 @@ const server = app.listen(PORT, () =>
 // shared internal connection pool or agent state for concurrent upgrades to
 // corrupt.
 const CHAT_TARGET = new URL(app.SERVICES.chat);
+const upgraded = new Set();
+runtime.addDrain(() => {
+  for (const socket of upgraded) socket.destroy();
+});
 
 server.on("upgrade", (req, socket, head) => {
-  if (!req.url.startsWith("/api/chat")) return;
+  if (runtime.isDraining() || !req.url.startsWith("/api/chat"))
+    return socket.destroy();
 
   const target = net.connect(
     Number(CHAT_TARGET.port) || 80,
@@ -56,6 +62,17 @@ server.on("upgrade", (req, socket, head) => {
       socket.pipe(target);
     },
   );
+
+  upgraded.add(socket);
+  upgraded.add(target);
+  socket.once("close", () => {
+    upgraded.delete(socket);
+    target.destroy();
+  });
+  target.once("close", () => {
+    upgraded.delete(target);
+    socket.destroy();
+  });
 
   // A broken pipe on either side must tear down the other side too — an
   // unhandled 'error' event on either raw socket would otherwise crash the

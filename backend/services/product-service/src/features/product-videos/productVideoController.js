@@ -4,8 +4,8 @@ const {
   paginatedResponse,
 } = require("@reloop/shared");
 const productVideoService = require("./productVideoService");
-const fs = require("node:fs/promises");
 const { validateListingVideo } = require("../../services/listingVideo");
+const { mediaStorage } = require("../../middleware/upload");
 
 function sellerUser(req) {
   return { id: req.userId, role: req.userRole };
@@ -74,6 +74,7 @@ async function uploadClip(req, res, next) {
   try {
     if (!req.file) throw badRequest("video file is required");
     await validateListingVideo(req.file);
+    await mediaStorage.persistUpload(req.file);
 
     res.status(201).json({
       media: [
@@ -84,7 +85,7 @@ async function uploadClip(req, res, next) {
       ],
     });
   } catch (err) {
-    if (req.file) await fs.rm(req.file.path, { force: true }).catch(() => {});
+    if (req.file) await mediaStorage.discardUpload(req.file).catch(() => {});
     next(err);
   }
 }

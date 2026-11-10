@@ -59,22 +59,12 @@ async function sweepCaseRetention(db, Prisma, domain, now = new Date()) {
 }
 
 function startCaseRetention(db, Prisma, domain) {
-  let running = false;
-  const tick = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await sweepCaseRetention(db, Prisma, domain);
-    } catch (err) {
-      console.error(`[${domain}] retention sweep failed: ${err.message}`);
-    } finally {
-      running = false;
-    }
-  };
-  void tick();
-  const timer = setInterval(tick, 60000);
-  timer.unref();
-  return () => clearInterval(timer);
+  const timer = require("./serviceRuntime").startPeriodicTask(
+    () => sweepCaseRetention(db, Prisma, domain),
+    60000,
+    { immediate: true },
+  );
+  return timer.stop;
 }
 
 module.exports = {

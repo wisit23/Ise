@@ -1,6 +1,4 @@
 const attachmentService = require("../attachments/attachmentService");
-const fs = require("fs");
-const { notFound } = require("@reloop/shared");
 const internalService = require("./internalService");
 
 // HTTP layer for the internal API. The rules live in internalService.js.
@@ -69,13 +67,15 @@ async function getAttachment(req, res, next) {
       conversationId: req.params.id,
       messageId: req.params.messageId,
     });
-    if (!fs.existsSync(attachment.path)) throw notFound("Attachment file unavailable");
+    const { attachmentStorage } = require("../attachments/attachmentStorage");
+    const key = require("node:path").basename(attachment.path);
+    await attachmentStorage.assertExists(key);
     res.setHeader("Content-Type", attachment.mimeType);
     res.setHeader(
       "Content-Disposition",
       `inline; filename="${encodeURIComponent(attachment.filename)}"`,
     );
-    fs.createReadStream(attachment.path).pipe(res);
+    await attachmentStorage.send(req, res, next, key);
   } catch (err) {
     next(err);
   }

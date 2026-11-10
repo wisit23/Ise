@@ -1,8 +1,8 @@
-const fs = require("fs");
+const path = require("node:path");
 const multer = require("multer");
 const { AppError, badRequest } = require("@reloop/shared");
 const attachmentService = require("./attachmentService");
-const { upload, MAX_FILE_BYTES } = require("./attachmentStorage");
+const { upload, MAX_FILE_BYTES, attachmentStorage } = require("./attachmentStorage");
 const broadcast = require("../../realtime/broadcast");
 
 /**
@@ -24,12 +24,10 @@ function uploadErrorHandler(err, req, res, next) {
   return next(badRequest(err.message));
 }
 
-/** multer has already written the file to disk by the time any of our own
- * checks run, so a rejected upload (not a participant, conversation locked)
- * would otherwise leave the bytes orphaned on the volume forever. */
-function discard(file) {
-  if (!file) return;
-  fs.unlink(file.path, () => {});
+/** Multer has already persisted the file by the time business checks run.
+ * Rejected uploads must be removed from the selected storage driver. */
+async function discard(file) {
+  await attachmentStorage.discardUpload(file);
 }
 
 const send = [
@@ -49,7 +47,7 @@ const send = [
       broadcast.broadcastMessage(conversation, message);
       res.status(201).json(message);
     } catch (err) {
-      discard(req.file);
+      await discard(req.file).catch(() => {});
       next(err);
     }
   },
@@ -57,7 +55,7 @@ const send = [
 
 async function download(req, res, next) {
   try {
-    const { path, mimeType, filename } =
+    const { path: filePath, mimeType, filename } =
       await attachmentService.resolveForDownload({
         conversationId: req.params.id,
         messageId: req.params.messageId,
@@ -71,12 +69,7 @@ async function download(req, res, next) {
       "Content-Disposition",
       `inline; filename="${encodeURIComponent(filename)}"`,
     );
-    const stream = fs.createReadStream(path);
-    // A missing file on disk (manually deleted, volume reset) must surface
-    // as a normal error response, not an unhandled stream error that kills
-    // the response mid-flight.
-    stream.on("error", next);
-    stream.pipe(res);
+    await attachmentStorage.send(req, res, next, path.basename(filePath));
   } catch (err) {
     next(err);
   }

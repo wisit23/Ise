@@ -1,6 +1,6 @@
 const { parsePagination, paginatedResponse } = require("@reloop/shared");
 const disputeService = require("./disputeService");
-const { upload } = require("./evidenceStorage");
+const { upload, evidenceStorage } = require("./evidenceStorage");
 
 async function open(req, res, next) {
   try {
@@ -97,6 +97,7 @@ const uploadEvidence = [
       });
       res.status(201).json(evidence);
     } catch (err) {
+      await evidenceStorage.discardUpload(req.file).catch(() => {});
       next(err);
     }
   },
@@ -112,7 +113,7 @@ async function viewEvidence(req, res, next) {
       roles: req.userRoles,
     });
     res.setHeader("Content-Type", fileType);
-    res.sendFile(filePath, err => { if(err) next(err); });
+    await evidenceStorage.send(req, res, next, require("node:path").basename(filePath));
   } catch (err) {
     next(err);
   }

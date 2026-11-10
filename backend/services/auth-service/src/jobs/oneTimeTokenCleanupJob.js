@@ -17,19 +17,25 @@ async function runCleanup() {
     try {
       const removed = await service.pruneExpired();
       if (removed > 0) {
-        console.log(`[oneTimeTokenCleanupJob] removed ${removed} old ${label} token(s)`);
+        console.log(
+          `[oneTimeTokenCleanupJob] removed ${removed} old ${label} token(s)`,
+        );
       }
     } catch (err) {
-      console.error(`[oneTimeTokenCleanupJob] ${label} cleanup failed:`, err.message);
+      console.error(
+        `[oneTimeTokenCleanupJob] ${label} cleanup failed:`,
+        err.message,
+      );
     }
   }
 }
 
 function start() {
-  setTimeout(() => {
-    runCleanup();
-    setInterval(runCleanup, RUN_INTERVAL_MS);
-  }, START_DELAY_MS);
+  return require("@reloop/shared").startPeriodicTask(
+    runCleanup,
+    RUN_INTERVAL_MS,
+    { delayMs: START_DELAY_MS },
+  );
 }
 
 module.exports = { start, runCleanup };

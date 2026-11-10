@@ -19,7 +19,7 @@ const orderLifecycle = require("../../services/orderLifecycle");
 const DISPUTABLE_STATUSES = ["delivered", "completed"];
 const authClient = require("../../services/authClient");
 const chatClient = require("../../services/chatClient");
-const { absolutePath } = require("./evidenceStorage");
+const { absolutePath, evidenceStorage } = require("./evidenceStorage");
 
 const { disputeCapabilities } = require("./workspacePolicy");
 const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "TRUST_AND_SAFETY", "ADMIN"]);
@@ -496,7 +496,7 @@ async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
   const evidence = await disputeModel.findEvidence(disputeId, evidenceId);
   if (!evidence) throw notFound("evidence not found");
 
-  try { await require("node:fs/promises").access(absolutePath(evidence.storageKey)); }
+  try { await evidenceStorage.assertExists(evidence.storageKey); }
   catch(err) {
     if(err.code !== "ENOENT") throw err;
     await disputeModel.auditLog({disputeId,evidenceId,actorId:userId,action:"EVIDENCE_MISSING",detail:evidenceId});

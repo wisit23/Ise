@@ -34,13 +34,11 @@ async function runExpiryCheck() {
 }
 
 function start() {
-  // Delay first run to let the DB connection pool warm up after boot.
-  setTimeout(() => {
-    runExpiryCheck();
-    setInterval(runExpiryCheck, RUN_INTERVAL_MS);
-  }, START_DELAY_MS);
-
-  console.log("[kycExpiryJob] scheduled — first run in 60 s, then every 24 h");
+  return require("@reloop/shared").startPeriodicTask(
+    runExpiryCheck,
+    RUN_INTERVAL_MS,
+    { delayMs: START_DELAY_MS },
+  );
 }
 
 module.exports = { start, runExpiryCheck };

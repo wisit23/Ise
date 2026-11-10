@@ -52,7 +52,9 @@ function createAuctionSettlementService({
       });
     }
 
-    throw new Error("product-service returned an invalid auction settlement outcome");
+    throw new Error(
+      "product-service returned an invalid auction settlement outcome",
+    );
   }
 
   async function expireDue({ at = now(), take = 50 } = {}) {
@@ -77,20 +79,18 @@ function createAuctionSettlementService({
   }
 
   function startWorker({ intervalMs = 15_000 } = {}) {
-    if (workerTimer) return workerTimer;
-    const sweep = () =>
-      expireDue().catch((error) => {
-        console.warn("[order-service] auction settlement sweep failed:", error.message);
-      });
-    sweep();
-    workerTimer = setInterval(sweep, intervalMs);
-    workerTimer.unref?.();
+    if (!workerTimer)
+      workerTimer = require("@reloop/shared").startPeriodicTask(
+        () => expireDue(),
+        intervalMs,
+        { immediate: true },
+      );
     return workerTimer;
   }
-
-  function stopWorker() {
-    if (workerTimer) clearInterval(workerTimer);
+  async function stopWorker() {
+    const current = workerTimer;
     workerTimer = null;
+    await current?.stop();
   }
 
   return { settleOne, expireDue, startWorker, stopWorker };

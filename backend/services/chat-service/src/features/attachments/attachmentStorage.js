@@ -6,18 +6,16 @@ const {
 // (see gateway/src/app.js PUBLIC_PATHS). A photo sent inside a private
 // conversation must never be readable by anyone who happens to have the
 // URL, so this mirrors order-service's private-evidence pattern instead:
-// its own directory the gateway never proxies as static files, with every
+// its own directory / S3 namespace, never exposed as static files, with every
 // read going through requireAuth + a participant check in
 // attachmentController.
 //
 // The file itself never goes into MongoDB — only its storage key lands in
 // Message.payload, per plan.md's Global Constraints ("ไฟล์แนบ ห้ามเก็บลง
 // ฐานข้อมูล").
-const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const multer = require("multer");
-const { badRequest } = require("@reloop/shared");
+const { badRequest, createMediaStorage } = require("@reloop/shared");
 
 const STORAGE_DIR = path.join(
   __dirname,
@@ -26,7 +24,7 @@ const STORAGE_DIR = path.join(
   "..",
   "private-attachments",
 );
-fs.mkdirSync(STORAGE_DIR, { recursive: true });
+const attachmentStorage = createMediaStorage({ directory: STORAGE_DIR, namespace: "chat-attachments" });
 
 // Same allow-list as the two existing upload paths in this repo. Kept
 // narrow on purpose: an attachment is a photo of an item or a receipt, not
@@ -36,16 +34,7 @@ const ALLOWED_MIME = { test: (type) => chat.mimeTypes.includes(type) };
 
 const MAX_FILE_BYTES = chat.maxFileBytes;
 
-const storage = multer.diskStorage({
-  destination: STORAGE_DIR,
-  filename(req, file, cb) {
-    // The stored name is ours, never the client's — an attacker-supplied
-    // originalname could contain path separators or a misleading double
-    // extension. The original is kept only as metadata in the payload.
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+const storage = attachmentStorage.multerStorage(multer);
 
 const upload = multer({
   storage,
@@ -75,6 +64,7 @@ function absolutePath(storageKey) {
 
 module.exports = {
   STORAGE_DIR,
+  attachmentStorage,
   upload,
   absolutePath,
   ALLOWED_MIME,

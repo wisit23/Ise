@@ -128,36 +128,23 @@ async function findPendingForOrder(orderId, db = prisma) {
 }
 
 let workerTimer = null;
-let running = false;
-
 function startWorker({
   intervalMs = RETRY_INTERVAL_MS,
   db = prisma,
   client = productClient,
 } = {}) {
-  if (workerTimer) return workerTimer;
-  const sweep = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await processPendingEvents({ db, client });
-    } catch (error) {
-      console.error("[order-service] attribution outbox sweep failed", error);
-    } finally {
-      running = false;
-    }
-  };
-  void sweep();
-  workerTimer = setInterval(sweep, intervalMs);
-  workerTimer.unref();
+  if (!workerTimer)
+    workerTimer = require("@reloop/shared").startPeriodicTask(
+      () => processPendingEvents({ db, client }),
+      intervalMs,
+      { immediate: true },
+    );
   return workerTimer;
 }
-
-function stopWorker() {
-  if (workerTimer) {
-    clearInterval(workerTimer);
-    workerTimer = null;
-  }
+async function stopWorker() {
+  const current = workerTimer;
+  workerTimer = null;
+  await current?.stop();
 }
 
 module.exports = {
