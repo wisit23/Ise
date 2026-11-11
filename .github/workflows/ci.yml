@@ -159,12 +159,15 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_CHAT }}
         run: npx prisma db push --schema backend/services/chat-service/prisma/schema.prisma --skip-generate
-      - name: Install video validation dependency
+      - name: Configure video validation dependency
         if: matrix.service == 'product-service'
+        timeout-minutes: 2
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
-          ffprobe -version
+          set -euo pipefail
+          ffprobe_path=$(node -p "require('ffprobe-static').path")
+          test -x "$ffprobe_path"
+          "$ffprobe_path" -version
+          echo "FFPROBE_PATH=$ffprobe_path" >> "$GITHUB_ENV"
       - name: Run service unit and integration tests
         run: npm run test:service -- ${{ matrix.service }}
       - name: Upload service test reports
@@ -207,7 +210,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [auth-service, product-service, order-service, chat-service, support-service, gateway, frontend]
+        component:
+          [
+            auth-service,
+            product-service,
+            order-service,
+            chat-service,
+            support-service,
+            gateway,
+            frontend,
+          ]
     steps:
       - uses: actions/checkout@v4
       - name: Build image only (no publish or deployment)
