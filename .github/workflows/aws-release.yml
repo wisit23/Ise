@@ -1,0 +1,178 @@
+name: AWS stage backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_inactive:
+        description: Deploy the inactive environment (false builds a bootstrap bundle only)
+        type: boolean
+        default: false
+      compatible:
+        description: Schema and parallel workers reviewed; staging data and backups ready
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-backend-staging
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment confirmation before building
+        env:
+          DEPLOY: ${{ inputs.deploy_inactive }}
+          COMPATIBLE: ${{ inputs.compatible }}
+        run: |
+          if [ "$DEPLOY" = true ] && [ "$COMPATIBLE" != true ]; then
+            echo 'Review schema and concurrent workers before staging.' >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx eslint backend/gateway backend/shared/src/corsOptions.js backend/shared/src/corsOptions.test.js backend/services/chat-service/src/realtime/socketServer.js
+      - run: node --test backend/gateway/src/awsDeployment.test.js backend/shared/src/corsOptions.test.js
+      - run: python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
+      - run: node scripts/ci/release-audit.cjs
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: aws-staging
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          [
+            gateway,
+            auth-service,
+            product-service,
+            order-service,
+            chat-service,
+            support-service,
+          ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Login and select build target
+        id: config
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT_ID"
+          registry="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+          workspace="backend/services/$COMPONENT"
+          runtime="services/$COMPONENT"
+          if [ "$COMPONENT" = gateway ]; then workspace=backend/gateway; runtime=gateway; fi
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+          echo "runtime=$runtime" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: deploy/cicd/Dockerfile
+          target: backend
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.config.outputs.registry }}/reloop/${{ matrix.component }}:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          build-args: |
+            WORKSPACE=${{ steps.config.outputs.workspace }}
+            RUNTIME_PATH=${{ steps.config.outputs.runtime }}
+          cache-from: type=gha,scope=aws-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=aws-${{ matrix.component }}
+      - name: Record immutable image
+        env:
+          COMPONENT: ${{ matrix.component }}
+          REGISTRY: ${{ steps.config.outputs.registry }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          app = os.environ['COMPONENT']
+          record = {'component': app, 'commit': os.environ['GITHUB_SHA'],
+                    'image': os.environ['REGISTRY'] + '/reloop/' + app + '@' + os.environ['DIGEST']}
+          Path(app + '.json').write_text(json.dumps(record))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-image-${{ matrix.component }}
+          path: ${{ matrix.component }}.json
+          retention-days: 30
+
+  bundle:
+    needs: images
+    runs-on: ubuntu-latest
+    environment: aws-staging
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_EB_APPLICATION: ${{ vars.AWS_EB_APPLICATION }}
+      AWS_EB_BLUE: ${{ vars.AWS_EB_BLUE }}
+      AWS_EB_GREEN: ${{ vars.AWS_EB_GREEN }}
+      AWS_EB_PRODUCTION_CNAME: ${{ vars.AWS_EB_PRODUCTION_CNAME }}
+      AWS_EB_PRODUCTION_URL: ${{ vars.AWS_EB_PRODUCTION_URL }}
+      AWS_EB_BLUE_URL: ${{ vars.AWS_EB_BLUE_URL }}
+      AWS_EB_GREEN_URL: ${{ vars.AWS_EB_GREEN_URL }}
+      BUNDLE_BUCKET: ${{ vars.AWS_BUNDLE_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: aws-image-*
+          path: image-records
+          merge-multiple: true
+      - name: Build bootstrap or deployment bundle
+        run: |
+          python3 deploy/aws/bundle.py --images image-records --commit "$GITHUB_SHA" \
+            --version-label "$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --region "$AWS_REGION" --registry "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com" \
+            --output out
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: inputs.deploy_inactive
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy and smoke test inactive environment
+        if: inputs.deploy_inactive
+        env:
+          COMPATIBLE: ${{ inputs.compatible }}
+        run: |
+          test "$COMPATIBLE" = true
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT_ID"
+          python3 deploy/aws/rollout.py stage --compatible --input out/release.json \
+            --output out/release.json --bundle out/application.zip --bucket "$BUNDLE_BUCKET"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aws-release
+          path: out/
+          if-no-files-found: error
+          retention-days: 30

@@ -33,3 +33,6 @@ docs/diagrams/
 backend/services/chat-service/private-attachments/*
 !backend/services/chat-service/private-attachments/.gitkeep
 .deploy-state/
+# Isolated runtime and verification output for AWS preparation.
+tmp/tools/
+tmp/aws-checks/

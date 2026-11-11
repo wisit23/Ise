@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { requireAuth } = require("@reloop/shared");
+const { createCorsOptions } = require("@reloop/shared/src/corsOptions");
 
 const SERVICES = {
   auth: process.env.AUTH_SERVICE_URL || "http://auth-service:3001",
@@ -63,7 +64,7 @@ function isPublic(path) {
 }
 
 const app = express();
-app.use(cors({ exposedHeaders: ["Retry-After", "X-Server-Time"] }));
+app.use(cors(createCorsOptions()));
 
 // Strip untrusted inbound x-user-* headers so external clients cannot spoof user identity
 app.use((req, res, next) => {
@@ -78,7 +79,11 @@ app.use((req, res, next) => {
 });
 
 app.get("/health", (req, res) =>
-  res.json({ status: "ok", service: "gateway" }),
+  res.json({
+    status: "ok",
+    service: "gateway",
+    release: process.env.RELEASE_ID,
+  }),
 );
 
 app.use((req, res, next) => {
@@ -115,7 +120,11 @@ app.use(
   "/api/auth",
   // xfwd passes the caller's address on, so auth-service's login history and
   // per-IP rate limits see the real client instead of the gateway.
-  createProxyMiddleware({ target: SERVICES.auth, changeOrigin: true, xfwd: true }),
+  createProxyMiddleware({
+    target: SERVICES.auth,
+    changeOrigin: true,
+    xfwd: true,
+  }),
 );
 app.use(
   "/api/products",
@@ -195,19 +204,23 @@ app.use(
   createProxyMiddleware({ target: SERVICES.support, changeOrigin: true }),
 );
 
-// Fallback: proxy all web UI requests (pages, _next assets, favicon, etc.) to Frontend
-app.use(
-  "/",
-  createProxyMiddleware({
-    target: SERVICES.frontend,
-    changeOrigin: true,
-    // ws: true installs a server-wide upgrade listener after the first UI
-    // request. Express's mount path does not restrict that listener, so
-    // exclude chat upgrades already owned by server.js's raw TCP proxy.
-    pathFilter: (path) => !/^\/api\/chat(?:\/|$)/.test(path),
-    ws: true,
-  }),
-);
+// Amplify serves the UI in AWS. Preserve the existing VM's UI proxy by default.
+if (process.env.GATEWAY_FRONTEND_PROXY === "false") {
+  app.use((req, res) => res.status(404).json({ error: "Not found" }));
+} else {
+  app.use(
+    "/",
+    createProxyMiddleware({
+      target: SERVICES.frontend,
+      changeOrigin: true,
+      // ws: true installs a server-wide upgrade listener after the first UI
+      // request. Express's mount path does not restrict that listener, so
+      // exclude chat upgrades already owned by server.js's raw TCP proxy.
+      pathFilter: (path) => !/^\/api\/chat(?:\/|$)/.test(path),
+      ws: true,
+    }),
+  );
+}
 
 module.exports = app;
 module.exports.SERVICES = SERVICES;

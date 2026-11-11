@@ -5,3 +5,4 @@
 /deploy/cicd/ise-deploy text eol=lf
 /deploy/cicd/*.service text eol=lf
 /deploy/cicd/*.timer text eol=lf
+/deploy/aws/**/*.sh text eol=lf

@@ -76,9 +76,9 @@ test('rendered documents split into seven apps and infrastructure as the script 
   for (const doc of apps) assert.ok(names.includes(yaml.load(doc).metadata.name));
 });
 
-test('build uses Node 24, lockfile, production Next build, and excludes sensitive context', () => {
+test('build uses Node 22, lockfile, production Next build, and excludes sensitive context', () => {
   const dockerfile = fs.readFileSync(path.join(__dirname, 'Dockerfile'), 'utf8');
-  assert.match(dockerfile, /FROM node:24-bookworm-slim/);
+  assert.match(dockerfile, /FROM node:22-bookworm-slim/);
   assert.match(dockerfile, /package-lock.json/);
   assert.match(dockerfile, /npm ci/);
   assert.match(dockerfile, /RUN npm run build/);

@@ -40,7 +40,9 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
       - name: Deployment contract and helper tests
-        run: python3 -B -m unittest discover -s deploy/cicd -p 'test_*.py' -v
+        run: |
+          python3 -B -m unittest discover -s deploy/cicd -p 'test_*.py' -v
+          python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
       - name: Release dependency gate
         run: node scripts/ci/release-audit.cjs
 

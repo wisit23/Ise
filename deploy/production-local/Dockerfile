@@ -1,5 +1,5 @@
-# Isolated Node 24 build path; existing Compose Dockerfiles are unchanged.
-FROM node:24-bookworm-slim AS workspace
+# Isolated Node 22 build path; existing Compose Dockerfiles are unchanged.
+FROM node:22-bookworm-slim AS workspace
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

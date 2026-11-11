@@ -119,8 +119,7 @@ foreach ($target in $buildTargets) {
 
 imagePullPolicy: Never หมายถึงใช้ image ที่โหลดเข้า node เท่านั้น
 ถ้าเห็น ErrImageNeverPull แสดงว่าลืมโหลด image หรือชื่อ/tag ไม่ตรง
-Dockerfile เดิมยังใช้ Node 22 แต่ root package.json ระบุ Node 24; หาก build มี engine error
-ต้องปรับ Dockerfile/runtime ให้ตรงกันก่อน ชุดนี้ยังไม่ได้ทดสอบ build
+Dockerfiles and the root package engine use Node 22; this development build has not been verified in this change.
 
 ## 5. เตรียม Secret
 

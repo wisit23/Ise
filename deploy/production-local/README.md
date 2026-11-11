@@ -20,7 +20,7 @@
   **การใช้ `.env` เดียวกันไม่ใช่การย้ายข้อมูลจาก Compose/Cloud**
 - artifacts: `deploy/production-local/.state/<image-tag>/` ถูก ignore ทั้ง Git และ Docker build
 
-ใช้ Node 24, root `package-lock.json` และ `npm ci` สำหรับ image ชุดนี้เท่านั้น
+ใช้ Node 22, root `package-lock.json` และ `npm ci` สำหรับ image ชุดนี้เท่านั้น
 Frontend ใช้ `next build`/`next start`; backend เริ่มด้วย `node src/server.js`
 แอปรันเป็น non-root และมี PVC สำหรับ KYC, uploads, reviews, evidence และ attachments
 

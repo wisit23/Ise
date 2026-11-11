@@ -197,6 +197,7 @@ export function participantRoleLabel(role, contextType) {
  * to REST polling" rather than tearing anything down. */
 export function connectSocket(token) {
   return io(API_URL, {
+    withCredentials: process.env.NEXT_PUBLIC_SOCKET_CREDENTIALS === "true",
     path: "/api/chat/socket.io",
     auth: (cb) => {
       cb({ token: getAccessToken() || token });

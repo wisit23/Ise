@@ -10,7 +10,7 @@ server example ยังปิด CD ไว้ ไม่มีการ deploy �
 
 ## ไฟล์และการทำงาน
 
-- `Dockerfile`: Node 24, root lockfile และ runtime paths เดิม เช่น
+- `Dockerfile`: Node 22, root lockfile และ runtime paths เดิม เช่น
   `/app/services/auth-service/private-kyc-documents`
 - `release.py`: สร้าง/ตรวจ manifest ให้ครบ 7 image จาก commit เดียวกันและ registry
   namespace ของ Ise เท่านั้น รวม fingerprint ที่เข้ากับ deployment journal เดิม

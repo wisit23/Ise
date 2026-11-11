@@ -1,0 +1,94 @@
+name: AWS promote or rollback backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Promote a staged release, or roll back a successful promotion
+        type: choice
+        options: [promote, rollback]
+      source_run_id:
+        description: Successful AWS stage run ID for promotion; successful AWS promotion run ID for rollback
+        type: string
+        required: true
+      compatible:
+        description: Target schema and concurrent workers reviewed; backup/rollback conditions still valid
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: aws-backend-staging
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: aws-promotion
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      AWS_EB_APPLICATION: ${{ vars.AWS_EB_APPLICATION }}
+      AWS_EB_BLUE: ${{ vars.AWS_EB_BLUE }}
+      AWS_EB_GREEN: ${{ vars.AWS_EB_GREEN }}
+      AWS_EB_PRODUCTION_CNAME: ${{ vars.AWS_EB_PRODUCTION_CNAME }}
+      AWS_EB_PRODUCTION_URL: ${{ vars.AWS_EB_PRODUCTION_URL }}
+      AWS_EB_BLUE_URL: ${{ vars.AWS_EB_BLUE_URL }}
+      AWS_EB_GREEN_URL: ${{ vars.AWS_EB_GREEN_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate successful source workflow
+        id: source
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+          MODE: ${{ inputs.mode }}
+          COMPATIBLE: ${{ inputs.compatible }}
+        with:
+          script: |
+            if (process.env.COMPATIBLE !== 'true') throw Error('Compatibility confirmation is required');
+            const id = process.env.SOURCE_RUN;
+            if (!/^[1-9][0-9]*$/.test(id)) throw Error('Invalid run ID');
+            const mode = process.env.MODE;
+            if (!['promote', 'rollback'].includes(mode)) throw Error('Invalid operation');
+            const path = mode === 'promote' ? '.github/workflows/aws-release.yml' : '.github/workflows/aws-promote.yml';
+            const {owner, repo} = context.repo;
+            const {data: run} = await github.rest.actions.getWorkflowRun({owner, repo, run_id: id});
+            if (run.path !== path || run.head_branch !== 'main' || run.event !== 'workflow_dispatch' ||
+                run.conclusion !== 'success' || run.head_repository.full_name !== `${owner}/${repo}`) {
+              throw Error('Source must be a successful trusted main workflow');
+            }
+            core.setOutput('artifact', mode === 'promote' ? 'aws-release' : 'aws-promotion');
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          name: ${{ steps.source.outputs.artifact }}
+          path: source-release
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Promote or roll back the recorded release
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT_ID"
+          if [ "$MODE" = promote ]; then input=source-release/release.json; else input=source-release/promotion.json; fi
+          python3 deploy/aws/rollout.py "$MODE" --compatible --input "$input" --output out/promotion.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aws-promotion
+          path: out/promotion.json
+          if-no-files-found: warn
+          retention-days: 90

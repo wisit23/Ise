@@ -1,6 +1,7 @@
 const { Server } = require("socket.io");
 const { createAdapter } = require("@socket.io/redis-adapter");
 const IORedis = require("ioredis");
+const { createCorsOptions } = require("@reloop/shared/src/corsOptions");
 const { verifySocketAuth } = require("./socketAuth");
 const conversationService = require("../features/conversations/conversationService");
 const presence = require("../realtime/presence");
@@ -25,7 +26,7 @@ function createSocketServer(httpServer) {
   // 404 the WS upgrade through the real Docker Compose stack.
   const io = new Server(httpServer, {
     path: "/api/chat/socket.io",
-    cors: { origin: "*" },
+    cors: createCorsOptions(),
   });
 
   const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";

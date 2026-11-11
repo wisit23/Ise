@@ -14,6 +14,7 @@ export default function useCatalogLiveRefresh(onRefresh) {
   useEffect(() => {
     catalogSocket ||= io(`${process.env.NEXT_PUBLIC_API_URL || ""}/catalog`, {
       path: "/api/chat/socket.io",
+      withCredentials: process.env.NEXT_PUBLIC_SOCKET_CREDENTIALS === "true",
       transports: ["websocket", "polling"],
     });
     const socket = catalogSocket;

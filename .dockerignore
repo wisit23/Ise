@@ -6,6 +6,8 @@ node_modules
 dist
 **/dist
 coverage
+tmp
+output
 **/coverage
 **/src/generated
 .env

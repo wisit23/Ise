@@ -8,7 +8,14 @@ requireEnv(["JWT_ACCESS_SECRET"]);
 const app = require("./app");
 
 const PORT = process.env.GATEWAY_PORT || 8080;
-const runtime = createServiceRuntime({ app, service: "gateway" });
+const runtime = createServiceRuntime({
+  app,
+  service: "gateway",
+  checks:
+    process.env.GATEWAY_CHECK_UPSTREAMS === "true"
+      ? require("./readiness").createUpstreamChecks(app.SERVICES)
+      : [],
+});
 runtime.installSignals();
 const server = runtime.server;
 server.listen(PORT, () => console.log(`[gateway] listening on ${PORT}`));

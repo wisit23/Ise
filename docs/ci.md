@@ -19,7 +19,7 @@ deploy services, or require deployment credentials.
 - **CI result:** fails if any required job fails, is cancelled, or is skipped.
   This is the check to select when configuring GitHub branch protection.
 
-Node tests use Node 24 from `.nvmrc`, matching the root package engine.
+Node tests use Node 22 from `.nvmrc`, matching the root package engine.
 Docker builds exercise the existing Dockerfiles and their Node 22 runtime.
 Backend jobs upload JUnit XML and LCOV reports; Frontend uploads Jest coverage.
 Reports are retained for 14 days, including reports produced by failing suites.

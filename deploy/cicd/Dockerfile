@@ -1,7 +1,7 @@
 # Build from the repository root. Preserve the existing cloud mount paths.
 # Sharp 0.34.5's glibc x64 binary requires x86-64-v2; the production VM
 # supports the musl binary used by its existing Alpine application images.
-FROM node:24-alpine AS dependencies
+FROM node:22-alpine AS dependencies
 RUN apk add --no-cache openssl ca-certificates
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -50,7 +50,7 @@ ARG NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS=300
 ARG NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS=10000
 RUN npm run build
 
-FROM node:24-alpine AS frontend
+FROM node:22-alpine AS frontend
 WORKDIR /app/frontend
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
