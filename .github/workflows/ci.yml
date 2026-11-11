@@ -159,22 +159,15 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_CHAT }}
         run: npx prisma db push --schema backend/services/chat-service/prisma/schema.prisma --skip-generate
-      - name: Install video validation dependency
+      - name: Configure video validation dependency
         if: matrix.service == 'product-service'
-        timeout-minutes: 8
+        timeout-minutes: 2
         run: |
           set -euo pipefail
-          if ! command -v ffprobe >/dev/null 2>&1; then
-            # The Azure mirror can stall package downloads until the job times out.
-            for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
-              [ -f "$source" ] || continue
-              sudo sed -i -e 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
-                -e 's|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
-            done
-            sudo apt-get -o APT::Update::Error-Mode=any -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install --yes --no-install-recommends ffmpeg
-          fi
-          ffprobe -version
+          ffprobe_path=$(node -p "require('ffprobe-static').path")
+          test -x "$ffprobe_path"
+          "$ffprobe_path" -version
+          echo "FFPROBE_PATH=$ffprobe_path" >> "$GITHUB_ENV"
       - name: Run service unit and integration tests
         run: npm run test:service -- ${{ matrix.service }}
       - name: Upload service test reports
