@@ -161,9 +161,19 @@ jobs:
         run: npx prisma db push --schema backend/services/chat-service/prisma/schema.prisma --skip-generate
       - name: Install video validation dependency
         if: matrix.service == 'product-service'
+        timeout-minutes: 8
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
+          set -euo pipefail
+          if ! command -v ffprobe >/dev/null 2>&1; then
+            # The Azure mirror can stall package downloads until the job times out.
+            for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              [ -f "$source" ] || continue
+              sudo sed -i -e 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+                -e 's|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
+            done
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install --yes --no-install-recommends ffmpeg
+          fi
           ffprobe -version
       - name: Run service unit and integration tests
         run: npm run test:service -- ${{ matrix.service }}
@@ -207,7 +217,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [auth-service, product-service, order-service, chat-service, support-service, gateway, frontend]
+        component:
+          [
+            auth-service,
+            product-service,
+            order-service,
+            chat-service,
+            support-service,
+            gateway,
+            frontend,
+          ]
     steps:
       - uses: actions/checkout@v4
       - name: Build image only (no publish or deployment)
