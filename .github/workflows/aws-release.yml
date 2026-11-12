@@ -1,13 +1,19 @@
 name: AWS stage backend (build images)
 
 on:
+  push:
+    branches: [fullcloudstaging]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Push pipelines queue among themselves; the deploy job takes the shared
+# aws-backend-staging lock (in aws-eks-staging.yml), so it also serializes
+# against manual deploys. Manual builds keep the original shared group.
 concurrency:
-  group: aws-backend-staging
+  group: aws-backend-staging${{ github.event_name == 'push' && '-pipeline' || '' }}
+  queue: max
   cancel-in-progress: false
 
 env:
@@ -36,6 +42,7 @@ jobs:
       - run: node --test backend/gateway/src/awsDeployment.test.js backend/shared/src/corsOptions.test.js
       - run: node --test backend/shared/src/backgroundWorkers.test.js backend/shared/src/backgroundWorkerEntrypoints.test.js backend/shared/src/serviceRuntime.test.js backend/shared/src/serviceRuntime.signals.test.js
       - run: python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
+      - run: node --test scripts/ci/awsPipeline.test.cjs
       - run: node scripts/ci/release-audit.cjs
 
   images:
@@ -141,3 +148,18 @@ jobs:
           path: out/
           if-no-files-found: error
           retention-days: 30
+
+  # Deploy each successful push build: rolling before bootstrap, blue/green after.
+  # Set repository variable AWS_AUTO_DEPLOY=false to pause it without editing code.
+  deploy:
+    if: github.event_name == 'push' && vars.AWS_AUTO_DEPLOY != 'false'
+    needs: bundle
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/aws-eks-staging.yml
+    with:
+      deploy: true
+      compatible: true
+      auto: true
+    secrets: inherit

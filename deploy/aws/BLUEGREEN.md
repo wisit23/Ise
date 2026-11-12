@@ -29,12 +29,15 @@ this workflow does not increase limits or install another controller.
 
 ## First use
 
-1. Publish this code to `fullcloudstaging` and run **AWS stage backend (build
-   images)** from that branch. Keep its successful run ID. The release artifact
+1. Push this code to `fullcloudstaging`. **AWS stage backend (build images)**
+   now runs automatically and deploys by rolling while Blue/Green is not yet
+   bootstrapped. Keep the successful run ID. The release artifact
    must contain capability `background-workers-toggle-v1`. Older images cannot
    safely serve as standby.
-2. Run **AWS EKS staging** with `operation=rolling`, that new `source_run_id`,
-   `deploy=true`, `compatible=true`. This one-time rollout equips the existing
+2. Confirm that push pipeline's deploy job succeeded. Alternatively, a manually
+   dispatched build remains build-only: run **AWS EKS staging** with
+   `operation=rolling`, its new `source_run_id`, `deploy=true`, `compatible=true`.
+   This one-time rollout equips the existing
    Blue stack with worker control and slot/release identity. Confirm the public
    `/health` includes `deploymentSlot: blue` and the new release.
 3. In the administrator CloudShell, use the updated checkout and apply only the
@@ -72,6 +75,29 @@ this workflow does not increase limits or install another controller.
    strings in the output, never guess from a source commit or image tag.
 
 ## Release and rollback
+
+Every push to `fullcloudstaging` (including documentation-only pushes) runs
+verification, six immutable image builds, bundling and deployment.
+Runs queue without cancelling the current deployment (up to GitHub's 100 pending
+runs per concurrency group); a full queue is reported as cancelled by GitHub.
+Before bootstrap it uses rolling; after bootstrap it automatically prepares the
+inactive slot and promotes it, holding the same state lock across both steps.
+It requires ready state and never silently falls back to rolling if Blue/Green
+is failed or locked. Failed readiness/target checks stop promotion. A failure
+after the traffic switch can leave traffic switched; inspect state/ALB/public
+health and use the explicit rollback below. There is no automatic rollback.
+
+To pause automatic deployment while retaining builds, set **repository** Actions
+variable `AWS_AUTO_DEPLOY=false` (remove it or set `true` to resume). Repository
+environment approval/branch protection rules still apply; if `aws-staging` has
+required reviewers, those jobs wait for approval. No console rule is changed by
+this code. Manually dispatched builds remain build-only. Manual deployment may
+consume a successful trusted push build or manually dispatched build.
+
+Automatic promotion assumes each release remains compatible with the shared
+staging schema and workers. Make breaking schema changes an explicit coordinated
+operation. Automatic deployment runs the existing checks and public smoke tests;
+it does not run migrations or prove every application flow.
 
 Every operation uses branch `fullcloudstaging` and environment `aws-staging`.
 Build a new trusted source release before preparing the inactive slot. For an

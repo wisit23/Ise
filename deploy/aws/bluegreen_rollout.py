@@ -372,6 +372,23 @@ class Rollout:
         self.obj = self.client.replace_state(self.obj)
         self.locked = False
 
+    def auto(self, release, config):
+        """Prepare and promote under one lock; incomplete operations need recovery."""
+        bg.validate_source(release)
+        eks.configuration(config)
+        obj = self.client.get("configmap", bg.STATE_NAME)
+        if not obj:
+            raise ValueError("Bootstrap blue/green before automatic slot deployment")
+        state = bg.validate_state(json.loads(obj["data"]["state"]))
+        active_release = state["slots"][state["active"]]["release"]["version_label"]
+        self.load_lock(active_release)
+        if self.state["phase"] != "ready":
+            raise ValueError("Automatic deployment requires ready state; recover the previous operation first")
+        slot = "green" if self.state["active"] == "blue" else "blue"
+        print(f"Automatic deployment: {self.state['active']} -> {slot}; release {release['version_label']}", flush=True)
+        self.prepare(slot, release, config)
+        self.switch(slot, release["version_label"])
+
 
 def summary(obj):
     if not obj:
@@ -385,7 +402,7 @@ def summary(obj):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["status", "bootstrap", "prepare", "promote", "rollback", "unlock"])
+    parser.add_argument("operation", choices=["status", "bootstrap", "prepare", "promote", "rollback", "unlock", "auto"])
     parser.add_argument("--slot", choices=["blue", "green"])
     parser.add_argument("--release", type=Path)
     parser.add_argument("--config", type=Path)
@@ -413,10 +430,11 @@ def main():
     client.authorize()
     failure = None
     try:
-        if args.operation == "bootstrap":
+        if args.operation in {"bootstrap", "auto"}:
             if not args.release or not args.config:
-                raise ValueError("Bootstrap requires release and public config files")
-            rollout.bootstrap(json.loads(args.release.read_text()), json.loads(args.config.read_text()))
+                raise ValueError("Bootstrap/auto requires release and public config files")
+            method = rollout.bootstrap if args.operation == "bootstrap" else rollout.auto
+            method(json.loads(args.release.read_text()), json.loads(args.config.read_text()))
         else:
             if not args.slot:
                 raise ValueError("Select the explicit target slot")

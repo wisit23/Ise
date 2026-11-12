@@ -265,6 +265,55 @@ class BluegreenTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "staging account"):
             bg.validate_source(value)
 
+    def test_automatic_releases_alternate_slots_and_leave_only_active_workers(self):
+        cluster = Cluster()
+        self.bootstrap(cluster)
+        for version, target in [("push-one", "green"), ("push-two", "blue")]:
+            op = Rollout(cluster, "https://api.example.com")
+            op.auto(capable(version), config())
+            self.assertEqual(cluster.get("configmap", bg.STATE_NAME)["data"]["lock"], op.owner)
+            op.finish()
+            state = summary(cluster.get("configmap", bg.STATE_NAME))
+            self.assertEqual(state["active"], target)
+            self.assertEqual(state["phase"], "ready")
+            self.assertEqual(state["lock"], "")
+            self.assertEqual(cluster.public_json("https://api.example.com", "/health")["release"], version)
+            for slot in ("blue", "green"):
+                for app in bg.WORKER_APPS:
+                    self.assertEqual(cluster.readiness(app, slot)["backgroundWorkersEnabled"], slot == target)
+
+    def test_automatic_deploy_requires_bootstrap_and_will_not_recover_failed_state(self):
+        cluster = Cluster()
+        op = Rollout(cluster, "https://api.example.com")
+        with self.assertRaisesRegex(ValueError, "Bootstrap"):
+            op.auto(capable("push"), config())
+        self.bootstrap(cluster)
+        obj = cluster.get("configmap", bg.STATE_NAME)
+        state = json.loads(obj["data"]["state"])
+        state["phase"] = "failed"
+        obj["data"]["state"] = json.dumps(state)
+        cluster.replace_state(obj)
+        before = len(cluster.events)
+        with self.assertRaisesRegex(ValueError, "recover") as raised:
+            op.auto(capable("push"), config())
+        op.finish(raised.exception)
+        self.assertEqual(cluster.events[before:], [])
+        self.assertEqual(cluster.routes, {"blue": 100})
+
+    def test_automatic_unhealthy_candidate_stops_before_promotion(self):
+        cluster = Cluster()
+        self.bootstrap(cluster)
+        cluster.unhealthy.add("green")
+        op = Rollout(cluster, "https://api.example.com")
+        with self.assertRaisesRegex(RuntimeError, "ALB forwarding") as raised:
+            op.auto(capable("push"), config())
+        op.finish(raised.exception)
+        self.assertEqual(cluster.routes, {"blue": 100, "green": 0})
+        state = summary(cluster.get("configmap", bg.STATE_NAME))
+        self.assertEqual(state["active"], "blue")
+        self.assertEqual(state["phase"], "failed")
+        self.assertFalse(cluster.readiness("order-service", "green")["backgroundWorkersEnabled"])
+
     def test_conflicting_lock_acquisition_cannot_unlock_another_operation(self):
         cluster = Cluster()
         self.bootstrap(cluster)

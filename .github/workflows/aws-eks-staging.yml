@@ -1,6 +1,18 @@
 name: AWS EKS staging
 
 on:
+  workflow_call:
+    inputs:
+      deploy:
+        type: boolean
+        default: true
+      compatible:
+        type: boolean
+        default: false
+      auto:
+        description: Called from the push pipeline; deploys the build of the current run
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       operation:
@@ -38,6 +50,7 @@ permissions:
 
 concurrency:
   group: aws-backend-staging
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -60,6 +73,7 @@ jobs:
       - name: Validate operation inputs
         env:
           OPERATION: ${{ inputs.operation || 'rolling' }}
+          AUTO: ${{ inputs.auto }}
           DEPLOY: ${{ inputs.deploy }}
           COMPATIBLE: ${{ inputs.compatible }}
           EXPECTED_ACTIVE: ${{ inputs.expected_active_release }}
@@ -81,8 +95,8 @@ jobs:
               raise SystemExit('Copy expected_active_release from status')
           if op in {'promote', 'rollback'} and not os.environ['EXPECTED_TARGET']:
               raise SystemExit('Copy expected_target_release from status')
-          if (live and op != 'rolling' or op == 'status') and not os.environ['AWS_EKS_API_ORIGIN']:
-              raise SystemExit('Set AWS_EKS_API_ORIGIN before blue/green')
+          if (live and (op != 'rolling' or os.environ['AUTO'] == 'true') or op == 'status') and not os.environ['AWS_EKS_API_ORIGIN']:
+              raise SystemExit('Set AWS_EKS_API_ORIGIN before automatic deployment or blue/green')
           PY
       - name: Verify deployment helpers
         run: python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
@@ -90,18 +104,25 @@ jobs:
         if: inputs.operation == 'rolling' || inputs.operation == '' || inputs.operation == 'bootstrap' || inputs.operation == 'prepare'
         uses: actions/github-script@v7
         env:
-          SOURCE_RUN: ${{ inputs.source_run_id }}
+          AUTO: ${{ inputs.auto }}
+          SOURCE_RUN: ${{ inputs.auto && github.run_id || inputs.source_run_id }}
           DEPLOY: ${{ inputs.deploy }}
           COMPATIBLE: ${{ inputs.compatible }}
         with:
           script: |
+            // auto: the build is the push run that called this workflow; its
+            // bundle job already succeeded (needs), so the run is still in progress.
+            const auto = process.env.AUTO === 'true';
             if (!/^[1-9][0-9]*$/.test(process.env.SOURCE_RUN)) throw Error('Invalid build run ID');
             if (!/^[0-9]{12}$/.test(process.env.AWS_ACCOUNT_ID)) throw Error('Set repository variable AWS_ACCOUNT_ID');
             if (process.env.DEPLOY === 'true' && process.env.COMPATIBLE !== 'true') throw Error('Review schema and workers before deployment');
             const {owner, repo} = context.repo;
             const {data: run} = await github.rest.actions.getWorkflowRun({owner, repo, run_id: process.env.SOURCE_RUN});
             if (run.path !== '.github/workflows/aws-release.yml' || run.head_branch !== 'fullcloudstaging' ||
-                run.event !== 'workflow_dispatch' || run.conclusion !== 'success' ||
+                !['push', 'workflow_dispatch'].includes(run.event) ||
+                (auto ? run.event !== 'push' || run.status !== 'in_progress' || run.id !== context.runId ||
+                  run.head_sha !== context.sha || run.run_attempt !== Number(process.env.GITHUB_RUN_ATTEMPT)
+                  : run.conclusion !== 'success') ||
                 run.head_repository.full_name !== `${owner}/${repo}`) throw Error('Use a successful trusted staging build');
             core.exportVariable('RELEASE_COMMIT', run.head_sha);
             core.exportVariable('RELEASE_VERSION', `${run.head_sha}-${run.id}-${run.run_attempt}`);
@@ -109,7 +130,7 @@ jobs:
         if: inputs.operation == 'rolling' || inputs.operation == '' || inputs.operation == 'bootstrap' || inputs.operation == 'prepare'
         with:
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.source_run_id }}
+          run-id: ${{ inputs.auto && github.run_id || inputs.source_run_id }}
           name: aws-release
           path: source-release
       - name: Validate release and render non-secret Kubernetes resources
@@ -181,11 +202,21 @@ jobs:
           sudo install -m 0755 kubectl /usr/local/bin/kubectl
           aws eks update-kubeconfig --name "$AWS_EKS_CLUSTER" --alias reloop-eks-staging
           kubectl auth can-i patch deployments --namespace reloop-staging | grep -qx yes
-      - name: Server validation and rolling deployment
+      - name: Automatic blue green or rolling deployment
+        id: rolling
         if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '')
+        env:
+          AUTO: ${{ inputs.auto }}
         run: |
           set -euo pipefail
           if [ -n "$(kubectl get configmap reloop-bluegreen --namespace reloop-staging --ignore-not-found -o name)" ]; then
+            if [ "$AUTO" = true ]; then
+              python3 deploy/aws/bluegreen_rollout.py auto \
+                --release source-release/release.json --config eks-config.json \
+                --api-origin "$AWS_EKS_API_ORIGIN"
+              echo applied=false >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo '::error::Blue/green state exists. Use prepare/promote/rollback instead of rolling deployment.'
             exit 1
           fi
@@ -195,7 +226,7 @@ jobs:
             kubectl rollout status "deployment/$app" --namespace reloop-staging --timeout=600s
           done
       - name: Verify the public CloudFront endpoint after it is configured
-        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '') && env.AWS_EKS_API_ORIGIN != ''
+        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '') && steps.rolling.outputs.applied != 'false' && env.AWS_EKS_API_ORIGIN != ''
         run: |
           python3 - <<'PY'
           import json, os, time, urllib.request
@@ -217,7 +248,7 @@ jobs:
                   time.sleep(10)
           PY
       - name: Report first-deployment endpoint setup
-        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '') && env.AWS_EKS_API_ORIGIN == ''
+        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '') && steps.rolling.outputs.applied != 'false' && env.AWS_EKS_API_ORIGIN == ''
         run: |
           echo '::warning::Private workloads deployed; public API is not verified. Configure CloudFront VPC origin and AWS_EKS_API_ORIGIN, then rerun to smoke test.'
       - name: Blue green operation
