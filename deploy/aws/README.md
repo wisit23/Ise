@@ -1,5 +1,12 @@
 # AWS backend staging (Node 22)
 
+**Current choice: [direct EKS Auto Mode staging](EKS.md), with CloudFront HTTPS
+and a private ALB.** Follow that guide for new setup. The Beanstalk instructions
+below are retained for the earlier deployment path; `application.zip` is not an
+EKS deployment package. The build workflow now only builds images and the legacy
+Beanstalk promotion workflow is disabled unless explicitly opted in with
+`AWS_LEGACY_BEANSTALK_ENABLED=true`.
+
 This is an opt-in deployment path for **Elastic Beanstalk Standard, Docker Compose,
 Application Load Balancer and private ECR**. Frontend hosting is separate on Amplify.
 The existing [single-node VM deployment](../production-cloud/README.md) and its

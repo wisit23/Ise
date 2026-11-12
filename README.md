@@ -18,9 +18,9 @@ Auth, product, order, and support use separate PostgreSQL databases via Prisma;
 chat uses MongoDB. Redis supports jobs and inter-service events. Media storage
 supports local Docker storage and S3. The existing production path runs on a
 single-node K3s cloud VM; see [VM CI/CD](deploy/cicd/README.md). A separate
-[AWS staging deployment](deploy/aws/README.md) provides Beanstalk/ECR bundles and
-manual staging/promotion workflows for a separate Amplify frontend. Local tests
-and builds cover this path; it has not been deployed or validated on AWS.
+[AWS staging deployment](deploy/aws/EKS.md) uses direct EKS Auto Mode, ECR and
+CloudFront, with the frontend hosted separately on Amplify. Backend image builds
+and ECR pushes have passed on AWS; EKS runtime deployment is not yet verified.
 
 ## Local start
 
