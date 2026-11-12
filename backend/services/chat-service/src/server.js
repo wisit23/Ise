@@ -1,5 +1,9 @@
 require("dotenv").config();
-const { requireEnv, createServiceRuntime } = require("@reloop/shared");
+const {
+  requireEnv,
+  createServiceRuntime,
+  startBackgroundWorkers,
+} = require("@reloop/shared");
 
 requireEnv(["DATABASE_URL"]);
 
@@ -27,7 +31,11 @@ runtime.addResource(() =>
   require("./middleware/rateLimit").closeRateLimitClient(),
 );
 
-const { startSupportSyncWorker } = require("./features/sync/supportSyncWorker");
-runtime.addWorker(startSupportSyncWorker().stop);
+startBackgroundWorkers(() => {
+  const {
+    startSupportSyncWorker,
+  } = require("./features/sync/supportSyncWorker");
+  runtime.addWorker(startSupportSyncWorker().stop);
+});
 
 server.listen(PORT, () => console.log(`[chat-service] listening on ${PORT}`));

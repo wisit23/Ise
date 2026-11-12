@@ -1,5 +1,9 @@
 require("dotenv").config();
-const { requireEnv, createServiceRuntime } = require("@reloop/shared");
+const {
+  requireEnv,
+  createServiceRuntime,
+  startBackgroundWorkers,
+} = require("@reloop/shared");
 
 requireEnv(["DATABASE_URL"]);
 
@@ -24,22 +28,24 @@ runtime.installSignals();
 const PORT = process.env.ORDER_PORT || 3003;
 runtime.server.listen(PORT, () => {
   console.log(`[order-service] listening on ${PORT}`);
-  runtime.addWorker(
-    require("@reloop/shared").startPeriodicTask(
-      () => orderModel.cleanExpiredOrders(productClient),
-      15000,
-    ).stop,
-  );
-  runtime.addWorker(checkoutSessionService.startExpiryWorker().stop);
-  runtime.addWorker(productSyncService.startWorker().stop);
-  runtime.addWorker(attributionOutboxService.startWorker().stop);
-  runtime.addWorker(
-    require("@reloop/shared/src/caseRetention").startCaseRetention(
-      require("./models/prismaClient"),
-      require("./generated/prisma-client").Prisma,
-      "disputes",
-    ),
-  );
-  runtime.addWorker(auctionSettlementService.startWorker().stop);
-  runtime.addWorker(orderLifecycleService.startWorker().stop);
+  startBackgroundWorkers(() => {
+    runtime.addWorker(
+      require("@reloop/shared").startPeriodicTask(
+        () => orderModel.cleanExpiredOrders(productClient),
+        15000,
+      ).stop,
+    );
+    runtime.addWorker(checkoutSessionService.startExpiryWorker().stop);
+    runtime.addWorker(productSyncService.startWorker().stop);
+    runtime.addWorker(attributionOutboxService.startWorker().stop);
+    runtime.addWorker(
+      require("@reloop/shared/src/caseRetention").startCaseRetention(
+        require("./models/prismaClient"),
+        require("./generated/prisma-client").Prisma,
+        "disputes",
+      ),
+    );
+    runtime.addWorker(auctionSettlementService.startWorker().stop);
+    runtime.addWorker(orderLifecycleService.startWorker().stop);
+  });
 });

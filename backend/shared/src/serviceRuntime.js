@@ -1,4 +1,5 @@
 const http = require("node:http");
+const { backgroundWorkersEnabled } = require("./backgroundWorkers");
 
 function startPeriodicTask(
   task,
@@ -53,6 +54,7 @@ function createServiceRuntime({
   const workers = [];
   const resources = [];
   const drains = [];
+  const workerMode = backgroundWorkersEnabled();
   const sockets = new Set();
   const responses = new Set();
   const server = http.createServer(async (req, res) => {
@@ -93,6 +95,9 @@ function createServiceRuntime({
         JSON.stringify({
           status: res.statusCode === 200 ? "ready" : "not_ready",
           service,
+          release: process.env.RELEASE_ID,
+          deploymentSlot: process.env.DEPLOYMENT_SLOT || "blue",
+          backgroundWorkersEnabled: workerMode,
         }),
       );
     }
@@ -113,7 +118,12 @@ function createServiceRuntime({
     if (closing) return closing;
     draining = true;
     for (const res of responses) {
-      if (String(res.getHeader("Content-Type") || "").startsWith("text/event-stream")) res.end();
+      if (
+        String(res.getHeader("Content-Type") || "").startsWith(
+          "text/event-stream",
+        )
+      )
+        res.end();
     }
     closing = (async () => {
       const deadline = setTimeout(() => {

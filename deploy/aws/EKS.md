@@ -278,6 +278,8 @@ WebSocket เดิมจะไม่หลุดระหว่าง deploymen
 
 ## Release, rollback และงานที่ยังไม่เสร็จ
 
+Blue/Green backend ทั้ง 6 services ใช้ [BLUEGREEN.md](BLUEGREEN.md) หลัง bootstrap แล้วต้องใช้ prepare/promote/rollback แทน rolling
+
 - build โค้ดใหม่ด้วย **AWS stage backend (build images)** แล้ว deploy source run ID
   ที่ผ่านเท่านั้น ไม่ใช้ image tag ที่เขียนทับได้
 - เก็บ artifacts และ ConfigMaps รุ่นก่อน (ชื่อ hash, immutable) สำหรับ rollback
@@ -285,7 +287,7 @@ WebSocket เดิมจะไม่หลุดระหว่าง deploymen
   ตรวจ schema, workers และ backup การ rollback แอปไม่ย้อนข้อมูลฐานข้อมูล
 - rollout ที่ล้มเหลวอาจทำให้บาง services เป็นรุ่นใหม่ไปแล้ว workflow จะหยุด
   ไม่สั่ง rollback แยก service หรือย้อนฐานข้อมูลโดยเดาเอง
-- ชุดนี้เริ่มด้วย **rolling update** ไม่ใช่ implementation ของ Blue/Green
+- การติดตั้งครั้งแรกเริ่มด้วย **rolling update**; เปิดใช้ Blue/Green ตาม [BLUEGREEN.md](BLUEGREEN.md)
   ไม่อ้าง zero downtime จนทดสอบ traffic, database compatibility, capacity,
   affinity และ reconnect แล้ว ต้องออกแบบเส้นทาง production แยกภายหลัง
 - ยังไม่เปิด production หรือย้ายข้อมูลจริงออกจาก VM

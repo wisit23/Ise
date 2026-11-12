@@ -1,4 +1,5 @@
 module.exports = {
+  ...require("./backgroundWorkers"),
   ...require("./serviceRuntime"),
   ...require("./mediaStorage"),
   ...require("./referenceDisplay"),

@@ -3,10 +3,26 @@ name: AWS EKS staging
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Rolling deployment or blue/green operation (bootstrap after a new worker-capable rolling release)
+        type: choice
+        options: [rolling, bootstrap, prepare, promote, rollback, status]
+        default: rolling
       source_run_id:
         description: Successful AWS stage backend build run ID
         type: string
-        required: true
+        required: false
+      slot:
+        description: Explicit target slot for prepare/promote/rollback
+        type: choice
+        options: [green, blue]
+        default: green
+      expected_active_release:
+        description: Copy active slot release from bluegreen status (required for prepare/promote/rollback)
+        type: string
+      expected_target_release:
+        description: Copy target slot release from bluegreen status (required for promote/rollback)
+        type: string
       deploy:
         description: Apply workloads to the existing EKS staging cluster (false renders artifacts only)
         type: boolean
@@ -29,7 +45,7 @@ jobs:
     if: github.ref == 'refs/heads/fullcloudstaging'
     runs-on: ubuntu-latest
     environment: aws-staging
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
@@ -41,7 +57,37 @@ jobs:
       SMTP_HOST: ${{ vars.AWS_SMTP_HOST }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate operation inputs
+        env:
+          OPERATION: ${{ inputs.operation || 'rolling' }}
+          DEPLOY: ${{ inputs.deploy }}
+          COMPATIBLE: ${{ inputs.compatible }}
+          EXPECTED_ACTIVE: ${{ inputs.expected_active_release }}
+          EXPECTED_TARGET: ${{ inputs.expected_target_release }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          op = os.environ['OPERATION']
+          if op not in {'rolling', 'bootstrap', 'prepare', 'promote', 'rollback', 'status'}:
+              raise SystemExit('Unknown operation')
+          if not re.fullmatch(r'[0-9]{12}', os.environ['AWS_ACCOUNT_ID']):
+              raise SystemExit('Set AWS_ACCOUNT_ID')
+          live = os.environ['DEPLOY'] == 'true'
+          if live and op != 'status' and os.environ['COMPATIBLE'] != 'true':
+              raise SystemExit('Review schema, worker handoff and backups first')
+          if op in {'promote', 'rollback'} and not live:
+              raise SystemExit('Promotion/rollback requires deploy=true')
+          if live and op in {'prepare', 'promote', 'rollback'} and not os.environ['EXPECTED_ACTIVE']:
+              raise SystemExit('Copy expected_active_release from status')
+          if op in {'promote', 'rollback'} and not os.environ['EXPECTED_TARGET']:
+              raise SystemExit('Copy expected_target_release from status')
+          if (live and op != 'rolling' or op == 'status') and not os.environ['AWS_EKS_API_ORIGIN']:
+              raise SystemExit('Set AWS_EKS_API_ORIGIN before blue/green')
+          PY
+      - name: Verify deployment helpers
+        run: python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
       - name: Validate successful staging build provenance
+        if: inputs.operation == 'rolling' || inputs.operation == '' || inputs.operation == 'bootstrap' || inputs.operation == 'prepare'
         uses: actions/github-script@v7
         env:
           SOURCE_RUN: ${{ inputs.source_run_id }}
@@ -60,12 +106,17 @@ jobs:
             core.exportVariable('RELEASE_COMMIT', run.head_sha);
             core.exportVariable('RELEASE_VERSION', `${run.head_sha}-${run.id}-${run.run_attempt}`);
       - uses: actions/download-artifact@v4
+        if: inputs.operation == 'rolling' || inputs.operation == '' || inputs.operation == 'bootstrap' || inputs.operation == 'prepare'
         with:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.source_run_id }}
           name: aws-release
           path: source-release
       - name: Validate release and render non-secret Kubernetes resources
+        if: inputs.operation == 'rolling' || inputs.operation == '' || inputs.operation == 'bootstrap' || inputs.operation == 'prepare'
+        env:
+          OPERATION: ${{ inputs.operation || 'rolling' }}
+          SLOT: ${{ inputs.slot }}
         run: |
           python3 - <<'PY'
           import json, os
@@ -79,21 +130,35 @@ jobs:
                         mail_from=os.environ['MAIL_FROM'], smtp_host=os.environ['SMTP_HOST'])
           Path('eks-config.json').write_text(json.dumps(config))
           PY
-          python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
           python3 deploy/aws/eks.py --release source-release/release.json --config eks-config.json --output out
+          python3 - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          sys.path.insert(0, 'deploy/aws')
+          import eks_bluegreen as bg
+          op = os.environ['OPERATION']
+          if op in {'bootstrap', 'prepare'}:
+              release = json.loads(Path('source-release/release.json').read_text())
+              bg.validate_source(release)
+              if op == 'prepare':
+                  config = json.loads(Path('eks-config.json').read_text())
+                  Path('out/workloads.json').write_text(json.dumps({'apiVersion': 'v1', 'kind': 'List',
+                      'items': bg.manifests(release, config, os.environ['SLOT'], workers=False)}))
+          PY
       - uses: actions/upload-artifact@v4
+        if: inputs.operation == 'rolling' || inputs.operation == '' || inputs.operation == 'bootstrap' || inputs.operation == 'prepare'
         with:
           name: aws-eks-staging
           path: out/
           retention-days: 30
       - uses: aws-actions/configure-aws-credentials@v4
-        if: inputs.deploy
+        if: inputs.deploy || inputs.operation == 'status'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Verify staging cluster and configure kubectl
-        if: inputs.deploy
+        if: inputs.deploy || inputs.operation == 'status'
         run: |
           set -euo pipefail
           test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT_ID"
@@ -117,16 +182,20 @@ jobs:
           aws eks update-kubeconfig --name "$AWS_EKS_CLUSTER" --alias reloop-eks-staging
           kubectl auth can-i patch deployments --namespace reloop-staging | grep -qx yes
       - name: Server validation and rolling deployment
-        if: inputs.deploy
+        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '')
         run: |
           set -euo pipefail
+          if [ -n "$(kubectl get configmap reloop-bluegreen --namespace reloop-staging --ignore-not-found -o name)" ]; then
+            echo '::error::Blue/green state exists. Use prepare/promote/rollback instead of rolling deployment.'
+            exit 1
+          fi
           kubectl apply --server-side --field-manager=reloop-eks-ci --dry-run=server -f out/workloads.json
           kubectl apply --server-side --field-manager=reloop-eks-ci -f out/workloads.json
           for app in auth-service product-service order-service chat-service support-service gateway; do
             kubectl rollout status "deployment/$app" --namespace reloop-staging --timeout=600s
           done
       - name: Verify the public CloudFront endpoint after it is configured
-        if: inputs.deploy && env.AWS_EKS_API_ORIGIN != ''
+        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '') && env.AWS_EKS_API_ORIGIN != ''
         run: |
           python3 - <<'PY'
           import json, os, time, urllib.request
@@ -148,6 +217,22 @@ jobs:
                   time.sleep(10)
           PY
       - name: Report first-deployment endpoint setup
-        if: inputs.deploy && env.AWS_EKS_API_ORIGIN == ''
+        if: inputs.deploy && (inputs.operation == 'rolling' || inputs.operation == '') && env.AWS_EKS_API_ORIGIN == ''
         run: |
           echo '::warning::Private workloads deployed; public API is not verified. Configure CloudFront VPC origin and AWS_EKS_API_ORIGIN, then rerun to smoke test.'
+      - name: Blue green operation
+        if: inputs.operation != 'rolling' && inputs.operation != '' && (inputs.deploy || inputs.operation == 'status')
+        env:
+          OPERATION: ${{ inputs.operation }}
+          SLOT: ${{ inputs.slot }}
+          EXPECTED_ACTIVE: ${{ inputs.expected_active_release }}
+          EXPECTED_TARGET: ${{ inputs.expected_target_release }}
+        run: |
+          set -euo pipefail
+          args=("$OPERATION" --api-origin "$AWS_EKS_API_ORIGIN")
+          case "$OPERATION" in
+            bootstrap) args+=(--release source-release/release.json --config eks-config.json) ;;
+            prepare) args+=(--slot "$SLOT" --expected-active "$EXPECTED_ACTIVE" --release source-release/release.json --config eks-config.json) ;;
+            promote|rollback) args+=(--slot "$SLOT" --expected-active "$EXPECTED_ACTIVE" --expected-target "$EXPECTED_TARGET") ;;
+          esac
+          python3 deploy/aws/bluegreen_rollout.py "${args[@]}"

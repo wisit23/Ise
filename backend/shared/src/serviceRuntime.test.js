@@ -30,8 +30,42 @@ test("readiness checks dependencies without changing existing health or routes",
   assert.deepEqual(await failed.json(), {
     status: "not_ready",
     service: "test",
+    deploymentSlot: "blue",
+    backgroundWorkersEnabled: true,
   });
   assert.equal(await (await fetch(`${url}/health`)).text(), "existing");
+});
+
+test("standby readiness reports its running worker mode and release over HTTP", async (t) => {
+  const original = { ...process.env };
+  process.env.BACKGROUND_WORKERS_ENABLED = "false";
+  process.env.DEPLOYMENT_SLOT = "green";
+  process.env.RELEASE_ID = "candidate-release";
+  t.after(() => {
+    for (const name of [
+      "BACKGROUND_WORKERS_ENABLED",
+      "DEPLOYMENT_SLOT",
+      "RELEASE_ID",
+    ]) {
+      if (original[name] === undefined) delete process.env[name];
+      else process.env[name] = original[name];
+    }
+  });
+  const runtime = createServiceRuntime({
+    service: "test",
+    app: (req, res) => res.end("existing"),
+  });
+  const url = await listen(runtime);
+  t.after(() => runtime.shutdown());
+  const response = await fetch(`${url}/ready`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    status: "ready",
+    service: "test",
+    release: "candidate-release",
+    deploymentSlot: "green",
+    backgroundWorkersEnabled: false,
+  });
 });
 
 test("hung readiness probes time out without multiplying pending work", async (t) => {
@@ -131,10 +165,13 @@ test("periodic workers do not overlap and stop waits for the current attempt", a
 });
 
 test("shutdown closes a long-lived SSE response without waiting for the deadline", async () => {
-  const runtime = createServiceRuntime({ service: "sse", app: (req, res) => {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.write("event: ready\ndata: {}\n\n");
-  } });
+  const runtime = createServiceRuntime({
+    service: "sse",
+    app: (req, res) => {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.write("event: ready\ndata: {}\n\n");
+    },
+  });
   const url = await listen(runtime);
   const response = await fetch(url);
   await runtime.shutdown();

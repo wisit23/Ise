@@ -114,7 +114,7 @@ def main():
         if record.get("component") != app or record.get("commit") != args.commit:
             raise ValueError(f"Image provenance mismatch: {app}")
         images[app] = record["image"]
-    build({"format": 1, "node": "22", "commit": args.commit, "version_label": args.version_label, "region": args.region, "registry": args.registry, "images": images}, args.output)
+    build({"format": 1, "node": "22", "capabilities": ["background-workers-toggle-v1"], "commit": args.commit, "version_label": args.version_label, "region": args.region, "registry": args.registry, "images": images}, args.output)
 
 
 if __name__ == "__main__":

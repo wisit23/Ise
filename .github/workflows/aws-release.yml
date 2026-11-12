@@ -34,6 +34,7 @@ jobs:
       - run: npm ci
       - run: npx eslint backend/gateway backend/shared/src/corsOptions.js backend/shared/src/corsOptions.test.js backend/services/chat-service/src/realtime/socketServer.js
       - run: node --test backend/gateway/src/awsDeployment.test.js backend/shared/src/corsOptions.test.js
+      - run: node --test backend/shared/src/backgroundWorkers.test.js backend/shared/src/backgroundWorkerEntrypoints.test.js backend/shared/src/serviceRuntime.test.js backend/shared/src/serviceRuntime.signals.test.js
       - run: python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
       - run: node scripts/ci/release-audit.cjs
 

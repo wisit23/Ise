@@ -83,6 +83,7 @@ app.get("/health", (req, res) =>
     status: "ok",
     service: "gateway",
     release: process.env.RELEASE_ID,
+    deploymentSlot: process.env.DEPLOYMENT_SLOT || "blue",
   }),
 );
 

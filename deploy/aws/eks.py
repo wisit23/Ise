@@ -75,6 +75,8 @@ def platform():
         }),
         resource("rbac.authorization.k8s.io/v1", "Role", "reloop-deployer", rules=[
             {"apiGroups": [""], "resources": ["configmaps", "services"], "verbs": ["get", "list", "watch", "create", "update", "patch"]},
+            {"apiGroups": [""], "resources": ["pods", "services/proxy"], "verbs": ["get", "list"]},
+            {"apiGroups": ["eks.amazonaws.com"], "resources": ["targetgroupbindings"], "verbs": ["get", "list"]},
             {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get", "list", "watch", "create", "update", "patch"]},
             {"apiGroups": ["autoscaling"], "resources": ["horizontalpodautoscalers"], "verbs": ["get", "list", "watch", "create", "update", "patch"]},
             {"apiGroups": ["policy"], "resources": ["poddisruptionbudgets"], "verbs": ["get", "list", "watch", "create", "update", "patch"]},
@@ -117,6 +119,9 @@ def manifests(release, config):
                     raise ValueError("No Kubernetes configuration for " + source)
                 env.append({"name": key, "valueFrom": {"configMapKeyRef": {"name": config_name, "key": source}}})
         port = PORTS[app]
+        if "background-workers-toggle-v1" in release.get("capabilities", []):
+            env.extend([{"name": "BACKGROUND_WORKERS_ENABLED", "value": "true"},
+                        {"name": "DEPLOYMENT_SLOT", "value": "blue"}])
         container = {
             "name": app, "image": service["image"], "imagePullPolicy": "IfNotPresent",
             "ports": [{"name": "http", "containerPort": port}], "env": env,
@@ -142,6 +147,8 @@ def manifests(release, config):
                     "whenUnsatisfiable": "DoNotSchedule", "labelSelector": {"matchLabels": labels}}],
             }},
         }))
+        if "background-workers-toggle-v1" in release.get("capabilities", []):
+            items[-1]["spec"]["template"]["metadata"]["annotations"]["reloop/worker-control"] = "v1"
         service_spec = {"type": "ClusterIP", "selector": labels, "ports": [{"name": "http", "port": port, "targetPort": "http"}]}
         if app == "chat-service":
             # ALB pins the browser to a gateway; the gateway must then stay on one chat pod for polling.

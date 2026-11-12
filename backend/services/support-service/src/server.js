@@ -1,5 +1,9 @@
 require("dotenv").config();
-const { requireEnv, createServiceRuntime } = require("@reloop/shared");
+const {
+  requireEnv,
+  createServiceRuntime,
+  startBackgroundWorkers,
+} = require("@reloop/shared");
 
 requireEnv(["DATABASE_URL"]);
 
@@ -19,11 +23,13 @@ const PORT = process.env.SUPPORT_PORT || 3006;
 runtime.server.listen(PORT, () =>
   console.log(`[support-service] listening on ${PORT}`),
 );
-runtime.addWorker(slaMonitor.start().stop);
-runtime.addWorker(
-  require("@reloop/shared/src/caseRetention").startCaseRetention(
-    require("./models/prismaClient"),
-    require("./generated/prisma-client").Prisma,
-    "tickets",
-  ),
-);
+startBackgroundWorkers(() => {
+  runtime.addWorker(slaMonitor.start().stop);
+  runtime.addWorker(
+    require("@reloop/shared/src/caseRetention").startCaseRetention(
+      require("./models/prismaClient"),
+      require("./generated/prisma-client").Prisma,
+      "tickets",
+    ),
+  );
+});

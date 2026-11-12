@@ -1,5 +1,9 @@
 require("dotenv").config();
-const { requireEnv, createServiceRuntime } = require("@reloop/shared");
+const {
+  requireEnv,
+  createServiceRuntime,
+  startBackgroundWorkers,
+} = require("@reloop/shared");
 
 requireEnv(["DATABASE_URL"]);
 
@@ -53,23 +57,25 @@ runtime.server.listen(PORT, () =>
   console.log(`[product-service] listening on ${PORT}`),
 );
 
-// Opens and closes auctions at their scheduled boundaries without page visits.
-const auctionWorker = auctionCloseQueue.startWorker(auctionService.get);
-runtime.addWorker(() => auctionCloseQueue.stopWorker(auctionWorker));
+startBackgroundWorkers(() => {
+  // Opens and closes auctions at their scheduled boundaries without page visits.
+  const auctionWorker = auctionCloseQueue.startWorker(auctionService.get);
+  runtime.addWorker(() => auctionCloseQueue.stopWorker(auctionWorker));
+  const restoring = auctionService
+    .restoreScheduledJobs()
+    .catch((err) =>
+      console.error(
+        "[product-service] could not restore auction boundary jobs:",
+        err.message,
+      ),
+    );
+
+  runtime.addWorker(() => restoring);
+
+  // Releases cart reservations whose 10-minute hold has expired.
+  runtime.addWorker(startReservationExpiryWorker().stop);
+
+  // Automatically transitions published campaigns whose endsAt has passed to "ended".
+  runtime.addWorker(campaignService.startCampaignExpiryWorker().stop);
+});
 runtime.addResource(() => auctionCloseQueue.closeQueue());
-const restoring = auctionService
-  .restoreScheduledJobs()
-  .catch((err) =>
-    console.error(
-      "[product-service] could not restore auction boundary jobs:",
-      err.message,
-    ),
-  );
-
-runtime.addWorker(() => restoring);
-
-// Releases cart reservations whose 10-minute hold has expired.
-runtime.addWorker(startReservationExpiryWorker().stop);
-
-// Automatically transitions published campaigns whose endsAt has passed to "ended".
-runtime.addWorker(campaignService.startCampaignExpiryWorker().stop);
