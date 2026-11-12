@@ -1,0 +1,153 @@
+name: AWS EKS staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful AWS stage backend build run ID
+        type: string
+        required: true
+      deploy:
+        description: Apply workloads to the existing EKS staging cluster (false renders artifacts only)
+        type: boolean
+        default: false
+      compatible:
+        description: Staging schema, parallel workers and backups reviewed
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: aws-backend-staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: github.ref == 'refs/heads/fullcloudstaging'
+    runs-on: ubuntu-latest
+    environment: aws-staging
+    timeout-minutes: 35
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      AWS_EKS_CLUSTER: reloop-staging
+      AWS_EKS_API_ORIGIN: ${{ vars.AWS_EKS_API_ORIGIN }}
+      AWS_MEDIA_BUCKET: ${{ vars.AWS_MEDIA_BUCKET }}
+      FRONTEND_ORIGIN: ${{ vars.AWS_FRONTEND_ORIGIN }}
+      MAIL_FROM: ${{ vars.AWS_MAIL_FROM }}
+      SMTP_HOST: ${{ vars.AWS_SMTP_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate successful staging build provenance
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN: ${{ inputs.source_run_id }}
+          DEPLOY: ${{ inputs.deploy }}
+          COMPATIBLE: ${{ inputs.compatible }}
+        with:
+          script: |
+            if (!/^[1-9][0-9]*$/.test(process.env.SOURCE_RUN)) throw Error('Invalid build run ID');
+            if (!/^[0-9]{12}$/.test(process.env.AWS_ACCOUNT_ID)) throw Error('Set repository variable AWS_ACCOUNT_ID');
+            if (process.env.DEPLOY === 'true' && process.env.COMPATIBLE !== 'true') throw Error('Review schema and workers before deployment');
+            const {owner, repo} = context.repo;
+            const {data: run} = await github.rest.actions.getWorkflowRun({owner, repo, run_id: process.env.SOURCE_RUN});
+            if (run.path !== '.github/workflows/aws-release.yml' || run.head_branch !== 'fullcloudstaging' ||
+                run.event !== 'workflow_dispatch' || run.conclusion !== 'success' ||
+                run.head_repository.full_name !== `${owner}/${repo}`) throw Error('Use a successful trusted staging build');
+            core.exportVariable('RELEASE_COMMIT', run.head_sha);
+            core.exportVariable('RELEASE_VERSION', `${run.head_sha}-${run.id}-${run.run_attempt}`);
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          name: aws-release
+          path: source-release
+      - name: Validate release and render non-secret Kubernetes resources
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          release = json.loads(Path('source-release/release.json').read_text())
+          registry = f"{os.environ['AWS_ACCOUNT_ID']}.dkr.ecr.{os.environ['AWS_REGION']}.amazonaws.com"
+          if (release['commit'] != os.environ['RELEASE_COMMIT'] or release['registry'] != registry or
+              release['version_label'] != os.environ['RELEASE_VERSION']):
+              raise SystemExit('Release provenance, account or Region mismatch')
+          config = dict(frontend_origin=os.environ['FRONTEND_ORIGIN'], media_bucket=os.environ['AWS_MEDIA_BUCKET'],
+                        mail_from=os.environ['MAIL_FROM'], smtp_host=os.environ['SMTP_HOST'])
+          Path('eks-config.json').write_text(json.dumps(config))
+          PY
+          python3 -B -m unittest discover -s deploy/aws -p 'test_*.py' -v
+          python3 deploy/aws/eks.py --release source-release/release.json --config eks-config.json --output out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aws-eks-staging
+          path: out/
+          retention-days: 30
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: inputs.deploy
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Verify staging cluster and configure kubectl
+        if: inputs.deploy
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT_ID"
+          aws eks describe-cluster --name "$AWS_EKS_CLUSTER" --output json > cluster.json
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          cluster = json.loads(Path('cluster.json').read_text())['cluster']
+          expected = f"arn:aws:eks:{os.environ['AWS_REGION']}:{os.environ['AWS_ACCOUNT_ID']}:cluster/reloop-staging"
+          if (cluster['arn'] != expected or cluster['status'] != 'ACTIVE' or
+              not cluster.get('computeConfig', {}).get('enabled')):
+              raise SystemExit('Expected the ACTIVE EKS Auto Mode staging cluster')
+          PY
+          minor=$(python3 -c "import json; print(json.load(open('cluster.json'))['cluster']['version'])")
+          kube_release=$(curl --fail --silent --show-error --location "https://dl.k8s.io/release/stable-$minor.txt")
+          [[ "$kube_release" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          curl --fail --silent --show-error --location --output kubectl "https://dl.k8s.io/release/$kube_release/bin/linux/amd64/kubectl"
+          curl --fail --silent --show-error --location --output kubectl.sha256 "https://dl.k8s.io/release/$kube_release/bin/linux/amd64/kubectl.sha256"
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          aws eks update-kubeconfig --name "$AWS_EKS_CLUSTER" --alias reloop-eks-staging
+          kubectl auth can-i patch deployments --namespace reloop-staging | grep -qx yes
+      - name: Server validation and rolling deployment
+        if: inputs.deploy
+        run: |
+          set -euo pipefail
+          kubectl apply --server-side --field-manager=reloop-eks-ci --dry-run=server -f out/workloads.json
+          kubectl apply --server-side --field-manager=reloop-eks-ci -f out/workloads.json
+          for app in auth-service product-service order-service chat-service support-service gateway; do
+            kubectl rollout status "deployment/$app" --namespace reloop-staging --timeout=600s
+          done
+      - name: Verify the public CloudFront endpoint after it is configured
+        if: inputs.deploy && env.AWS_EKS_API_ORIGIN != ''
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request
+          import sys
+          sys.path.insert(0, 'deploy/aws')
+          from eks import origin as validate_origin
+          origin = validate_origin(os.environ['AWS_EKS_API_ORIGIN'])
+          for attempt in range(18):
+              try:
+                  for path in ('/ready', '/health', '/api/products/feed'):
+                      with urllib.request.urlopen(origin + path, timeout=10) as response:
+                          body = response.read()
+                          if path == '/health' and json.loads(body).get('release') != os.environ['RELEASE_VERSION']:
+                              raise RuntimeError('Gateway release identity mismatch')
+                  break
+              except Exception:
+                  if attempt == 17:
+                      raise
+                  time.sleep(10)
+          PY
+      - name: Report first-deployment endpoint setup
+        if: inputs.deploy && env.AWS_EKS_API_ORIGIN == ''
+        run: |
+          echo '::warning::Private workloads deployed; public API is not verified. Configure CloudFront VPC origin and AWS_EKS_API_ORIGIN, then rerun to smoke test.'
