@@ -2,7 +2,7 @@ name: AWS stage backend (build images)
 
 on:
   push:
-    branches: [fullcloudstaging]
+    branches: [fullcloudstaging, fullcloudmain]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/fullcloudstaging'
+    if: github.ref == 'refs/heads/fullcloudstaging' || github.ref == 'refs/heads/fullcloudmain'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -149,10 +149,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # Deploy each successful push build: rolling before bootstrap, blue/green after.
-  # Set repository variable AWS_AUTO_DEPLOY=false to pause it without editing code.
+  # Deploy each successful fullcloudmain push build: rolling before bootstrap,
+  # blue/green after. The called job uses environment aws-production, so its
+  # required reviewers approve before anything changes. fullcloudstaging pushes
+  # only verify and build. Set repository variable AWS_AUTO_DEPLOY=false to pause
+  # deployment without editing code.
   deploy:
-    if: github.event_name == 'push' && vars.AWS_AUTO_DEPLOY != 'false'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fullcloudmain' && vars.AWS_AUTO_DEPLOY != 'false'
     needs: bundle
     permissions:
       contents: read

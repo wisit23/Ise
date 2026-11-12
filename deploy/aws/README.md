@@ -119,7 +119,10 @@ The current delivery path is `fullcloudstaging` -> backend staging. Test that AP
 with the Amplify staging frontend before promoting application code to
 `fullcloudmain`. Production deployment is not wired yet: it will need separate
 GitHub environment configuration, Beanstalk environments, secrets/data and a
-reviewed production release path. These workflows reject `fullcloudmain`.
+reviewed production release path. The legacy Beanstalk workflow rejects
+`fullcloudmain`. The EKS workflows (`aws-release.yml`, `aws-eks-staging.yml`)
+deploy `fullcloudmain` through GitHub environment `aws-production`; see
+BLUEGREEN.md.
 
 Blue/Green here means two Beanstalk environments **inside staging**. The legacy
 variable names `AWS_EB_PRODUCTION_CNAME` / `AWS_EB_PRODUCTION_URL` mean the stable

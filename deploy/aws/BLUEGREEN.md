@@ -76,8 +76,11 @@ this workflow does not increase limits or install another controller.
 
 ## Release and rollback
 
-Every push to `fullcloudstaging` (including documentation-only pushes) runs
-verification, six immutable image builds, bundling and deployment.
+Every push to `fullcloudstaging` or `fullcloudmain` (including documentation-only
+pushes) runs verification, six immutable image builds and bundling. Only
+`fullcloudmain` continues to deployment; `fullcloudstaging` is build-only. Both
+branches target the same EKS cluster, so this is an approval gate, not a separate
+test system.
 Runs queue without cancelling the current deployment (up to GitHub's 100 pending
 runs per concurrency group); a full queue is reported as cancelled by GitHub.
 Before bootstrap it uses rolling; after bootstrap it automatically prepares the
@@ -89,9 +92,13 @@ health and use the explicit rollback below. There is no automatic rollback.
 
 To pause automatic deployment while retaining builds, set **repository** Actions
 variable `AWS_AUTO_DEPLOY=false` (remove it or set `true` to resume). Repository
-environment approval/branch protection rules still apply; if `aws-staging` has
-required reviewers, those jobs wait for approval. No console rule is changed by
-this code. Manually dispatched builds remain build-only. Manual deployment may
+environment approval/branch protection rules still apply. The deploy job of a
+`fullcloudmain` run uses GitHub environment `aws-production`; if it has required
+reviewers, that job waits for approval. Create `aws-production` in GitHub, add the
+reviewers, and copy the same environment variables as `aws-staging`
+(`AWS_EKS_API_ORIGIN`, `AWS_FRONTEND_ORIGIN`, `AWS_MAIL_FROM`, `AWS_MEDIA_BUCKET`,
+`AWS_SMTP_HOST`) before the first `fullcloudmain` push. Without reviewers the job
+runs without approval. No console rule is changed by this code. Manually dispatched builds remain build-only. Manual deployment may
 consume a successful trusted push build or manually dispatched build.
 
 Automatic promotion assumes each release remains compatible with the shared
@@ -99,7 +106,10 @@ staging schema and workers. Make breaking schema changes an explicit coordinated
 operation. Automatic deployment runs the existing checks and public smoke tests;
 it does not run migrations or prove every application flow.
 
-Every operation uses branch `fullcloudstaging` and environment `aws-staging`.
+Live operations (`deploy=true`, except `status`) run only from `fullcloudmain`
+with environment `aws-production`, and must use a build made from the same
+branch. `status` and render-only runs may also run from `fullcloudstaging` with
+`aws-staging`. Run workflows with the Branch selector set accordingly.
 Build a new trusted source release before preparing the inactive slot. For an
 initial routing rehearsal, the same worker-capable build can fill both slots;
 slot identity distinguishes them, but this does not test code compatibility

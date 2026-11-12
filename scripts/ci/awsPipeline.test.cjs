@@ -38,11 +38,16 @@ function runRecord(overrides = {}) {
   };
 }
 
-async function check(run, auto = true) {
+async function check(run, auto = true, branch = "fullcloudstaging") {
   const exported = {};
   await validate(
     { rest: { actions: { getWorkflowRun: async () => ({ data: run }) } } },
-    { repo: { owner: "wisit23", repo: "Ise" }, runId: 123, sha: "abc123" },
+    {
+      repo: { owner: "wisit23", repo: "Ise" },
+      runId: 123,
+      sha: "abc123",
+      ref: `refs/heads/${branch}`,
+    },
     {
       exportVariable: (name, value) => {
         exported[name] = value;
@@ -82,6 +87,42 @@ test("automatic deploy rejects another run, attempt, commit, branch, event or re
     { path: ".github/workflows/other.yml" },
   ])
     await assert.rejects(check(runRecord(overrides)), /trusted staging build/);
+});
+
+test("a deployment accepts only a build from the branch that runs it", async () => {
+  assert.deepEqual(
+    await check(
+      runRecord({ head_branch: "fullcloudmain" }),
+      true,
+      "fullcloudmain",
+    ),
+    { RELEASE_COMMIT: "abc123", RELEASE_VERSION: "abc123-123-1" },
+  );
+  await assert.rejects(
+    check(
+      runRecord({ head_branch: "fullcloudstaging" }),
+      true,
+      "fullcloudmain",
+    ),
+    /trusted staging build/,
+  );
+  await assert.rejects(
+    check(
+      runRecord({ head_branch: "fullcloudmain" }),
+      true,
+      "fullcloudstaging",
+    ),
+    /trusted staging build/,
+  );
+  const done = { status: "completed", conclusion: "success" };
+  await assert.rejects(
+    check(
+      runRecord({ ...done, head_branch: "fullcloudstaging" }),
+      false,
+      "fullcloudmain",
+    ),
+    /trusted staging build/,
+  );
 });
 
 test("manual deployment accepts completed successful trusted push or manual builds", async () => {

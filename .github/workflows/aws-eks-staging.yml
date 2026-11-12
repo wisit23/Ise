@@ -55,9 +55,11 @@ concurrency:
 
 jobs:
   staging:
-    if: github.ref == 'refs/heads/fullcloudstaging'
+    if: github.ref == 'refs/heads/fullcloudstaging' || github.ref == 'refs/heads/fullcloudmain'
     runs-on: ubuntu-latest
-    environment: aws-staging
+    # fullcloudmain deploys through aws-production so its required reviewers gate
+    # every live operation; fullcloudstaging stays build-only (see input checks).
+    environment: ${{ github.ref == 'refs/heads/fullcloudmain' && 'aws-production' || 'aws-staging' }}
     timeout-minutes: 60
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
@@ -87,6 +89,8 @@ jobs:
           if not re.fullmatch(r'[0-9]{12}', os.environ['AWS_ACCOUNT_ID']):
               raise SystemExit('Set AWS_ACCOUNT_ID')
           live = os.environ['DEPLOY'] == 'true'
+          if live and op != 'status' and os.environ['GITHUB_REF_NAME'] != 'fullcloudmain':
+              raise SystemExit('Live operations run only from fullcloudmain; fullcloudstaging is build-only')
           if live and op != 'status' and os.environ['COMPATIBLE'] != 'true':
               raise SystemExit('Review schema, worker handoff and backups first')
           if op in {'promote', 'rollback'} and not live:
@@ -117,8 +121,10 @@ jobs:
             if (!/^[0-9]{12}$/.test(process.env.AWS_ACCOUNT_ID)) throw Error('Set repository variable AWS_ACCOUNT_ID');
             if (process.env.DEPLOY === 'true' && process.env.COMPATIBLE !== 'true') throw Error('Review schema and workers before deployment');
             const {owner, repo} = context.repo;
+            // The build must come from the same branch that runs this deployment.
+            const branch = context.ref.replace(/^refs\/heads\//, '');
             const {data: run} = await github.rest.actions.getWorkflowRun({owner, repo, run_id: process.env.SOURCE_RUN});
-            if (run.path !== '.github/workflows/aws-release.yml' || run.head_branch !== 'fullcloudstaging' ||
+            if (run.path !== '.github/workflows/aws-release.yml' || run.head_branch !== branch ||
                 !['push', 'workflow_dispatch'].includes(run.event) ||
                 (auto ? run.event !== 'push' || run.status !== 'in_progress' || run.id !== context.runId ||
                   run.head_sha !== context.sha || run.run_attempt !== Number(process.env.GITHUB_RUN_ATTEMPT)
