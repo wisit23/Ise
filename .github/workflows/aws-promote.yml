@@ -1,4 +1,4 @@
-name: AWS promote or rollback backend
+name: AWS promote or rollback staging backend
 
 on:
   workflow_dispatch:
@@ -26,9 +26,9 @@ concurrency:
 
 jobs:
   promote:
-    if: github.ref == 'refs/heads/fullcloudmain'
+    if: github.ref == 'refs/heads/fullcloudstaging'
     runs-on: ubuntu-latest
-    environment: aws-promotion
+    environment: aws-staging
     timeout-minutes: 30
     permissions:
       contents: read
@@ -62,9 +62,9 @@ jobs:
             const path = mode === 'promote' ? '.github/workflows/aws-release.yml' : '.github/workflows/aws-promote.yml';
             const {owner, repo} = context.repo;
             const {data: run} = await github.rest.actions.getWorkflowRun({owner, repo, run_id: id});
-            if (run.path !== path || run.head_branch !== 'fullcloudmain' || run.event !== 'workflow_dispatch' ||
+            if (run.path !== path || run.head_branch !== 'fullcloudstaging' || run.event !== 'workflow_dispatch' ||
                 run.conclusion !== 'success' || run.head_repository.full_name !== `${owner}/${repo}`) {
-              throw Error('Source must be a successful trusted fullcloudmain workflow');
+              throw Error('Source must be a successful trusted fullcloudstaging workflow');
             }
             core.setOutput('artifact', mode === 'promote' ? 'aws-release' : 'aws-promotion');
       - uses: actions/download-artifact@v4

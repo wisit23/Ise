@@ -108,15 +108,26 @@ bundle provides platform log streaming, not an application access-log dashboard.
 
 ## GitHub setup (access-key authentication)
 
-Create environments `aws-staging` and `aws-promotion`; restrict them to
-`fullcloudmain`. Enable required reviewers for promotion where the repository
-plan supports that feature. Both workflows are `workflow_dispatch` only and share
+The current delivery path is `fullcloudstaging` -> backend staging. Test that API
+with the Amplify staging frontend before promoting application code to
+`fullcloudmain`. Production deployment is not wired yet: it will need separate
+GitHub environment configuration, Beanstalk environments, secrets/data and a
+reviewed production release path. These workflows reject `fullcloudmain`.
+
+Blue/Green here means two Beanstalk environments **inside staging**. The legacy
+variable names `AWS_EB_PRODUCTION_CNAME` / `AWS_EB_PRODUCTION_URL` mean the stable
+public endpoint of that staging pair, not the actual production API. Do not put
+production resources or production data into `aws-staging`.
+
+Create the GitHub environment `aws-staging` and restrict it to
+`fullcloudstaging`. Both AWS workflows currently target staging only.
+Enable required reviewers where the repository plan supports that feature. Both workflows are `workflow_dispatch` only and share
 one deployment concurrency group. Neither replaces existing CI, GHCR or VM workflows.
 
 GitHub requires a `workflow_dispatch` workflow to exist on the repository's default
 branch before it can be dispatched. If the default branch is still `main` without
 these files, first merge the reviewed workflow definitions there, keeping the
-`fullcloudmain` execution guards, then select `fullcloudmain` when running them.
+`fullcloudstaging` execution guards, then select `fullcloudstaging` when running them.
 Do not change the default branch or merge the full application just to expose a button.
 
 Use a dedicated IAM user such as `reloop-github-deploy`. Store its credentials in
@@ -144,8 +155,9 @@ update-environment/swap-environment-cnames for the intended application and
 pair of environments. Some describe operations require resource `*`; scope other
 actions by ARN. Do not grant AdministratorAccess as an image-push workaround.
 
-Set these **repository variables**. Keep environment-level overrides consistent;
-the workflow-wide Region/account settings are read before individual jobs run:
+Set `AWS_REGION` and `AWS_ACCOUNT_ID` as **repository variables**; the workflow-wide
+settings are read before jobs run. Put the remaining Beanstalk/bucket variables in
+the **aws-staging environment** and point them only at staging resources:
 
 | Variable                  | Value                                                            |
 | ------------------------- | ---------------------------------------------------------------- |
@@ -169,7 +181,7 @@ pass smoke tests. Provision listeners/redirects and confirm DNS before staging.
 
 ## First deployment / bootstrap
 
-1. Land reviewed code on `fullcloudmain` and run **AWS stage backend** with
+1. Land reviewed code on `fullcloudstaging` and run **AWS stage backend** with
    `deploy_inactive=false`. It runs checks, builds six Node 22 images in ECR and
    uploads `aws-release/application.zip` plus `release.json` as a GitHub artifact.
    No Beanstalk mutation occurs in this mode, but ECR storage/build usage is real.
@@ -187,14 +199,14 @@ pass smoke tests. Provision listeners/redirects and confirm DNS before staging.
    tests; enable at least two instances across AZs only after measuring memory and
    database connection limits. Set a credit-aware maximum and scaling policies.
 
-## Subsequent staging, promotion and rollback
+## Subsequent staging Blue/Green releases and rollback
 
-1. Run **AWS stage backend** on `fullcloudmain` with `deploy_inactive=true` and `compatible=true`
+1. Run **AWS stage backend** on `fullcloudstaging` with `deploy_inactive=true` and `compatible=true`
    only after reviewing migrations, workers and backups. The script identifies the
    inactive environment from the actual production CNAME, deploys a unique version,
    checks Beanstalk health and verifies `/ready`, `/health` identity and product feed
    through that environment's HTTPS test hostname. It does not switch production.
-2. Run **AWS promote or rollback backend**, `mode=promote`, using the successful
+2. Run **AWS promote or rollback staging backend**, `mode=promote`, using the successful
    staging **run ID**. Confirm compatibility. Provenance and the exact active/candidate
    versions are checked again. The script records state before requesting a swap.
 3. Public smoke checks retry for DNS convergence. A confirmed swapped release that
@@ -202,7 +214,7 @@ pass smoke tests. Provision listeners/redirects and confirm DNS before staging.
    the workflow still fails and records `rolled_back`. An ambiguous state requires
    inspection instead of another blind swap. Inspect both DNS and actual traffic.
 4. For a later explicit rollback, select `mode=rollback` and the successful promotion
-   **run ID**, not the staging run ID. The `aws-promotion/promotion.json` record must
+   **run ID**, not the staging run ID. The `aws-promotion/promotion.json` artifact record must
    still match both environment versions. Stale/overwritten rollback targets fail.
 5. Keep both environments/images and data schema compatible until DNS, sockets and
    traffic drain. Never terminate the old environment immediately after a swap.

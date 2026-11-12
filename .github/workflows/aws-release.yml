@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_inactive:
-        description: Deploy the inactive environment (false builds a bootstrap bundle only)
+        description: Deploy the inactive staging environment (false builds a bootstrap bundle only)
         type: boolean
         default: false
       compatible:
@@ -25,11 +25,17 @@ env:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/fullcloudmain'
+    if: github.ref == 'refs/heads/fullcloudstaging'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Validate repository account configuration
+        run: |
+          if ! [[ "$AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+            echo '::error::Set repository variable AWS_ACCOUNT_ID to the 12-digit AWS staging account ID.'
+            exit 1
+          fi
       - name: Validate deployment confirmation before building
         env:
           DEPLOY: ${{ inputs.deploy_inactive }}
