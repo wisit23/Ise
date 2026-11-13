@@ -8,7 +8,17 @@ const { seedRoleCatalog } = require("./roleCatalog");
 
 const prisma = new PrismaClient();
 
-const DEMO_PASSWORD = "password123";
+// Local development keeps the documented default. For a database other people
+// can reach, set RELOOP_DEMO_PASSWORD (min 12 chars) and RELOOP_SKIP_STAFF=1.
+// An empty or short value must fail, never fall back to the known default.
+const customPassword = process.env.RELOOP_DEMO_PASSWORD;
+if (customPassword !== undefined && customPassword.length < 12) {
+  throw new Error("RELOOP_DEMO_PASSWORD must be at least 12 characters");
+}
+const DEMO_PASSWORD = customPassword ?? "password123";
+// Skips EXECUTIVE, STAFF (admin/marketing/trust) and SUPPORT_AGENTS; sellers
+// and buyers stay because product/order seeds reference their fixed UUIDs.
+const SKIP_STAFF = process.env.RELOOP_SKIP_STAFF === "1";
 
 const SELLERS = [
   {
@@ -256,24 +266,26 @@ async function main() {
     });
   }
 
-  await upsertUser({
-    id: EXECUTIVE.id,
-    email: EXECUTIVE.email,
-    firstName: EXECUTIVE.firstName,
-    lastName: EXECUTIVE.lastName,
-    role: "EXECUTIVE",
-    passwordHash,
-  });
-
-  for (const staff of STAFF) {
+  if (!SKIP_STAFF) {
     await upsertUser({
-      id: staff.id,
-      email: staff.email,
-      firstName: staff.firstName,
-      lastName: staff.lastName,
-      role: staff.role,
+      id: EXECUTIVE.id,
+      email: EXECUTIVE.email,
+      firstName: EXECUTIVE.firstName,
+      lastName: EXECUTIVE.lastName,
+      role: "EXECUTIVE",
       passwordHash,
     });
+
+    for (const staff of STAFF) {
+      await upsertUser({
+        id: staff.id,
+        email: staff.email,
+        firstName: staff.firstName,
+        lastName: staff.lastName,
+        role: staff.role,
+        passwordHash,
+      });
+    }
   }
 
   for (const buyer of BUYERS) {
@@ -287,19 +299,29 @@ async function main() {
     });
   }
 
-  for (const agent of SUPPORT_AGENTS) {
-    await upsertUser({
-      id: agent.id,
-      email: agent.email,
-      firstName: agent.firstName,
-      lastName: agent.lastName,
-      role: "CUSTOMER_SERVICE",
-      passwordHash,
-    });
+  if (!SKIP_STAFF) {
+    for (const agent of SUPPORT_AGENTS) {
+      await upsertUser({
+        id: agent.id,
+        email: agent.email,
+        firstName: agent.firstName,
+        lastName: agent.lastName,
+        role: "CUSTOMER_SERVICE",
+        passwordHash,
+      });
+    }
   }
 
+  const staffSummary = SKIP_STAFF
+    ? "no staff, executive or customer-service agents (RELOOP_SKIP_STAFF=1)"
+    : `${SUPPORT_AGENTS.length} customer-service agents, ${STAFF.length} staff, 1 executive`;
+  // Never print a password the operator chose; only the public local default.
+  const passwordNote =
+    customPassword === undefined
+      ? `password: "${DEMO_PASSWORD}"`
+      : "custom password from RELOOP_DEMO_PASSWORD";
   console.log(
-    `[auth-service] seeded ${SELLERS.length} sellers, ${BUYERS.length} buyers, ${SUPPORT_AGENTS.length} customer-service agents, ${STAFF.length} staff, 1 executive, and no automatic case reports (password: "${DEMO_PASSWORD}")`,
+    `[auth-service] seeded ${SELLERS.length} sellers, ${BUYERS.length} buyers, ${staffSummary}, and no automatic case reports (${passwordNote})`,
   );
 }
 
